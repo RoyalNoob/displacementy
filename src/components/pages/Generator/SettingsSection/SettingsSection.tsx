@@ -4,6 +4,7 @@ import {Checkbox} from '@/components/ui/Checkbox';
 import {useStore} from '../store';
 import {SectionTitle} from '../SectionTitle';
 import {
+  initialSeed as initialSeedConst,
   iterations as iterationsConst,
   backgroundBrightness as backgroundBrightnessConst,
   rectBrightness as rectBrightnessConst,
@@ -37,6 +38,7 @@ import {SliderForConstant} from './SliderForConstant';
 import {SlidersGroup} from './SlidersGroup';
 
 export function SettingsSection() {
+  const initialSeed = useStore((state) => state.initialSeed);
   const iterations = useStore((state) => state.iterations);
   const backgroundBrightness = useStore((state) => state.backgroundBrightness);
   const seamlessTextureEnabled = useStore(
@@ -82,6 +84,7 @@ export function SettingsSection() {
 
   const compositionModes = useStore((state) => state.compositionModes);
 
+  const setInitialSeed = useStore((state) => state.setInitialSeed);
   const setIterations = useStore((state) => state.setIterations);
   const setBackgroundBrightness = useStore(
     (state) => state.setBackgroundBrightness,
@@ -149,6 +152,12 @@ export function SettingsSection() {
       <div className='flex flex-col gap-4'>
         <Group title='Basics'>
           <SlidersGroup>
+            <SliderForConstant
+              label='Initial seed'
+              value={initialSeed}
+              setValue={setInitialSeed}
+              constant={initialSeedConst}
+            />
             <SliderForConstant
               label='Iterations'
               value={iterations}

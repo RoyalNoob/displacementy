@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {
+  initialSeed,
   iterations,
   backgroundBrightness,
   rectEnabled,
@@ -42,6 +43,7 @@ import {randomBoolean, randomInteger} from '@/utils/random';
 import {type NumberDual} from '@/types';
 
 type Values = {
+  initialSeed: number;
   iterations: number;
   backgroundBrightness: number;
   rectEnabled: boolean;
@@ -78,6 +80,7 @@ type Values = {
 };
 
 type Setters = {
+  setInitialSeed: (initialSeed: Values['initialSeed']) => void;
   setIterations: (iterations: Values['iterations']) => void;
   setBackgroundBrightness: (
     backgroundBrightness: Values['backgroundBrightness'],
@@ -121,6 +124,7 @@ type Setters = {
 
 type ComputedValues = {
   getSprites: () => HTMLImageElement[];
+  getSettingsQuery: () => string;
 };
 
 type Actions = {
@@ -134,45 +138,42 @@ type Actions = {
   randomizeCompositionModes: () => void;
 };
 
+const ALL_SPRITES_PACKS: SpritesPack[] = [
+  'classic',
+  'bigdata',
+  'aggromaxx',
+  'crappack',
+];
+
+const ALL_COMPOSITION_MODES: CompositionMode[] = [
+  'color-burn',
+  'color-dodge',
+  'darken',
+  'difference',
+  'exclusion',
+  'hard-light',
+  'lighten',
+  'lighter',
+  'luminosity',
+  'multiply',
+  'overlay',
+  'screen',
+  'soft-light',
+  'source-atop',
+  'source-over',
+  'xor',
+];
+
 export const useStore = create<Values & Setters & ComputedValues & Actions>(
   (set, get) => ({
     // Values
     // ---
-    iterations: iterations.default,
-    backgroundBrightness: backgroundBrightness.default,
-    rectEnabled: rectEnabled.default,
-    rectBrightness: rectBrightness.default,
-    rectAlpha: rectAlpha.default,
-    rectScale: rectScale.default,
-    gridEnabled: gridEnabled.default,
-    gridBrightness: gridBrightness.default,
-    gridAlpha: gridAlpha.default,
-    gridScale: gridScale.default,
-    gridAmount: gridAmount.default,
-    gridGap: gridGap.default,
-    colsEnabled: colsEnabled.default,
-    colsBrightness: colsBrightness.default,
-    colsAlpha: colsAlpha.default,
-    colsScale: colsScale.default,
-    colsAmount: colsAmount.default,
-    colsGap: colsGap.default,
-    rowsEnabled: rowsEnabled.default,
-    rowsBrightness: rowsBrightness.default,
-    rowsAlpha: rowsAlpha.default,
-    rowsScale: rowsScale.default,
-    rowsAmount: rowsAmount.default,
-    rowsGap: rowsGap.default,
-    linesEnabled: linesEnabled.default,
-    linesBrightness: linesBrightness.default,
-    linesAlpha: linesAlpha.default,
-    linesWidth: linesWidth.default,
-    spritesEnabled: spritesEnabled.default,
-    spritesPacks: spritesPacks.default,
-    spritesRotationEnabled: spritesRotationEnabled.default,
-    seamlessTextureEnabled: seamlessTextureEnabled.default,
-    compositionModes: compositionModes.default,
+    ...getInitialValues(),
     // Setters
     // ---
+    setInitialSeed(initialSeed: Values['initialSeed']) {
+      set(() => ({initialSeed}));
+    },
     setIterations(iterations: Values['iterations']) {
       set(() => ({iterations}));
     },
@@ -305,43 +306,13 @@ export const useStore = create<Values & Setters & ComputedValues & Actions>(
 
       return sprites;
     },
+    getSettingsQuery() {
+      return serializeValues(get());
+    },
     // Actions
     // ---
     randomize() {
-      set(() => ({
-        iterations: randSetting(iterations),
-        backgroundBrightness: randSetting(backgroundBrightness),
-        rectEnabled: randomBoolean(),
-        rectBrightness: randDualSetting(rectBrightness),
-        rectAlpha: randDualSetting(rectAlpha),
-        rectScale: randSetting(rectScale),
-        gridEnabled: randomBoolean(),
-        gridBrightness: randDualSetting(gridBrightness),
-        gridAlpha: randDualSetting(gridAlpha),
-        gridScale: randSetting(gridScale),
-        gridAmount: randDualSetting(gridAmount),
-        gridGap: randSetting(gridGap),
-        colsEnabled: randomBoolean(),
-        colsBrightness: randDualSetting(colsBrightness),
-        colsAlpha: randDualSetting(colsAlpha),
-        colsScale: randSetting(colsScale),
-        colsAmount: randDualSetting(colsAmount),
-        colsGap: randSetting(colsGap),
-        rowsEnabled: randomBoolean(),
-        rowsBrightness: randDualSetting(rowsBrightness),
-        rowsAlpha: randDualSetting(rowsAlpha),
-        rowsScale: randSetting(rowsScale),
-        rowsAmount: randDualSetting(rowsAmount),
-        rowsGap: randSetting(rowsGap),
-        linesEnabled: randomBoolean(),
-        linesBrightness: randDualSetting(linesBrightness),
-        linesAlpha: randDualSetting(linesAlpha),
-        linesWidth: randDualSetting(linesWidth),
-        spritesEnabled: randomBoolean(),
-        spritesPacks: randSpritesPacks(),
-        spritesRotationEnabled: randomBoolean(),
-        compositionModes: randCompositionModes(),
-      }));
+      set(() => randomValues());
     },
     randomizeRect() {
       set(() => ({
@@ -398,40 +369,266 @@ export const useStore = create<Values & Setters & ComputedValues & Actions>(
   }),
 );
 
-const randSetting = (setting: SettingConstant) =>
-  randomInteger(setting.min, setting.max);
+function randSetting(setting: SettingConstant): number {
+  return randomInteger(setting.min, setting.max);
+}
 
-const randDualSetting = (setting: SettingDualConstant): NumberDual => [
-  randomInteger(setting.min, setting.max),
-  randomInteger(setting.min, setting.max),
-];
+function randDualSetting(setting: SettingDualConstant): NumberDual {
+  return [
+    randomInteger(setting.min, setting.max),
+    randomInteger(setting.min, setting.max),
+  ];
+}
 
-const randSpritesPacks = (): SpritesPack[] => {
-  const packs: SpritesPack[] = [];
-  if (randomBoolean()) packs.push('classic');
-  if (randomBoolean()) packs.push('bigdata');
-  if (randomBoolean()) packs.push('aggromaxx');
-  if (randomBoolean()) packs.push('crappack');
-  return packs;
-};
+function randSpritesPacks(): SpritesPack[] {
+  return ALL_SPRITES_PACKS.filter(() => randomBoolean());
+}
 
-const randCompositionModes = (): CompositionMode[] => {
-  const modes: CompositionMode[] = [];
-  if (randomBoolean()) modes.push('color-burn');
-  if (randomBoolean()) modes.push('color-dodge');
-  if (randomBoolean()) modes.push('darken');
-  if (randomBoolean()) modes.push('difference');
-  if (randomBoolean()) modes.push('exclusion');
-  if (randomBoolean()) modes.push('hard-light');
-  if (randomBoolean()) modes.push('lighten');
-  if (randomBoolean()) modes.push('lighter');
-  if (randomBoolean()) modes.push('luminosity');
-  if (randomBoolean()) modes.push('multiply');
-  if (randomBoolean()) modes.push('overlay');
-  if (randomBoolean()) modes.push('screen');
-  if (randomBoolean()) modes.push('soft-light');
-  if (randomBoolean()) modes.push('source-atop');
-  if (randomBoolean()) modes.push('source-over');
-  if (randomBoolean()) modes.push('xor');
-  return modes;
-};
+function randCompositionModes(): CompositionMode[] {
+  return ALL_COMPOSITION_MODES.filter(() => randomBoolean());
+}
+
+/**
+ * A fully randomized set of values, used by `randomize()` and as the
+ * fallback when the page is loaded without any query parameters.
+ */
+function randomValues(): Values {
+  return {
+    initialSeed: randSetting(initialSeed),
+    iterations: randSetting(iterations),
+    backgroundBrightness: randSetting(backgroundBrightness),
+    rectEnabled: randomBoolean(),
+    rectBrightness: randDualSetting(rectBrightness),
+    rectAlpha: randDualSetting(rectAlpha),
+    rectScale: randSetting(rectScale),
+    gridEnabled: randomBoolean(),
+    gridBrightness: randDualSetting(gridBrightness),
+    gridAlpha: randDualSetting(gridAlpha),
+    gridScale: randSetting(gridScale),
+    gridAmount: randDualSetting(gridAmount),
+    gridGap: randSetting(gridGap),
+    colsEnabled: randomBoolean(),
+    colsBrightness: randDualSetting(colsBrightness),
+    colsAlpha: randDualSetting(colsAlpha),
+    colsScale: randSetting(colsScale),
+    colsAmount: randDualSetting(colsAmount),
+    colsGap: randSetting(colsGap),
+    rowsEnabled: randomBoolean(),
+    rowsBrightness: randDualSetting(rowsBrightness),
+    rowsAlpha: randDualSetting(rowsAlpha),
+    rowsScale: randSetting(rowsScale),
+    rowsAmount: randDualSetting(rowsAmount),
+    rowsGap: randSetting(rowsGap),
+    linesEnabled: randomBoolean(),
+    linesBrightness: randDualSetting(linesBrightness),
+    linesAlpha: randDualSetting(linesAlpha),
+    linesWidth: randDualSetting(linesWidth),
+    spritesEnabled: randomBoolean(),
+    spritesPacks: randSpritesPacks(),
+    spritesRotationEnabled: randomBoolean(),
+    seamlessTextureEnabled: seamlessTextureEnabled.default,
+    compositionModes: randCompositionModes(),
+  };
+}
+
+/** The deterministic default values, used as a base when parsing query params. */
+function defaultValues(): Values {
+  return {
+    initialSeed: initialSeed.default,
+    iterations: iterations.default,
+    backgroundBrightness: backgroundBrightness.default,
+    rectEnabled: rectEnabled.default,
+    rectBrightness: rectBrightness.default,
+    rectAlpha: rectAlpha.default,
+    rectScale: rectScale.default,
+    gridEnabled: gridEnabled.default,
+    gridBrightness: gridBrightness.default,
+    gridAlpha: gridAlpha.default,
+    gridScale: gridScale.default,
+    gridAmount: gridAmount.default,
+    gridGap: gridGap.default,
+    colsEnabled: colsEnabled.default,
+    colsBrightness: colsBrightness.default,
+    colsAlpha: colsAlpha.default,
+    colsScale: colsScale.default,
+    colsAmount: colsAmount.default,
+    colsGap: colsGap.default,
+    rowsEnabled: rowsEnabled.default,
+    rowsBrightness: rowsBrightness.default,
+    rowsAlpha: rowsAlpha.default,
+    rowsScale: rowsScale.default,
+    rowsAmount: rowsAmount.default,
+    rowsGap: rowsGap.default,
+    linesEnabled: linesEnabled.default,
+    linesBrightness: linesBrightness.default,
+    linesAlpha: linesAlpha.default,
+    linesWidth: linesWidth.default,
+    spritesEnabled: spritesEnabled.default,
+    spritesPacks: spritesPacks.default,
+    spritesRotationEnabled: spritesRotationEnabled.default,
+    seamlessTextureEnabled: seamlessTextureEnabled.default,
+    compositionModes: compositionModes.default,
+  };
+}
+
+// -------------------
+// QUERY PARAM PARSING
+// -------------------
+
+function parseNumber(raw: string | null, fallback: number): number {
+  if (raw === null) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseDual(raw: string | null, fallback: NumberDual): NumberDual {
+  if (raw === null) return fallback;
+  const parts = raw.split(',').map((p) => Number(p.trim()));
+  if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) {
+    return fallback;
+  }
+  return [parts[0], parts[1]];
+}
+
+function parseBoolean(raw: string | null, fallback: boolean): boolean {
+  if (raw === null) return fallback;
+  if (raw === '1' || raw === 'true') return true;
+  if (raw === '0' || raw === 'false') return false;
+  return fallback;
+}
+
+function parseList<T extends string>(
+  raw: string | null,
+  allowed: T[],
+  fallback: T[],
+): T[] {
+  if (raw === null) return fallback;
+  if (raw === '') return [];
+  const items = raw.split(',').map((p) => p.trim());
+  return allowed.filter((value) => items.includes(value));
+}
+
+/**
+ * Initial values for the store. When the page is opened with query
+ * parameters, each known setting is read from the URL (falling back to its
+ * default when absent). When opened with no parameters at all, everything is
+ * randomized — matching the previous "fresh pattern on every refresh" behavior.
+ */
+function getInitialValues(): Values {
+  if (typeof window === 'undefined') return defaultValues();
+
+  const params = new URLSearchParams(window.location.search);
+  if ([...params.keys()].length === 0) return randomValues();
+
+  const base = defaultValues();
+  const num = (key: string, fallback: number) =>
+    parseNumber(params.get(key), fallback);
+  const dual = (key: string, fallback: NumberDual) =>
+    parseDual(params.get(key), fallback);
+  const bool = (key: string, fallback: boolean) =>
+    parseBoolean(params.get(key), fallback);
+
+  return {
+    initialSeed: num('initialSeed', base.initialSeed),
+    iterations: num('iterations', base.iterations),
+    backgroundBrightness: num(
+      'backgroundBrightness',
+      base.backgroundBrightness,
+    ),
+    rectEnabled: bool('rectEnabled', base.rectEnabled),
+    rectBrightness: dual('rectBrightness', base.rectBrightness),
+    rectAlpha: dual('rectAlpha', base.rectAlpha),
+    rectScale: num('rectScale', base.rectScale),
+    gridEnabled: bool('gridEnabled', base.gridEnabled),
+    gridBrightness: dual('gridBrightness', base.gridBrightness),
+    gridAlpha: dual('gridAlpha', base.gridAlpha),
+    gridScale: num('gridScale', base.gridScale),
+    gridAmount: dual('gridAmount', base.gridAmount),
+    gridGap: num('gridGap', base.gridGap),
+    colsEnabled: bool('colsEnabled', base.colsEnabled),
+    colsBrightness: dual('colsBrightness', base.colsBrightness),
+    colsAlpha: dual('colsAlpha', base.colsAlpha),
+    colsScale: num('colsScale', base.colsScale),
+    colsAmount: dual('colsAmount', base.colsAmount),
+    colsGap: num('colsGap', base.colsGap),
+    rowsEnabled: bool('rowsEnabled', base.rowsEnabled),
+    rowsBrightness: dual('rowsBrightness', base.rowsBrightness),
+    rowsAlpha: dual('rowsAlpha', base.rowsAlpha),
+    rowsScale: num('rowsScale', base.rowsScale),
+    rowsAmount: dual('rowsAmount', base.rowsAmount),
+    rowsGap: num('rowsGap', base.rowsGap),
+    linesEnabled: bool('linesEnabled', base.linesEnabled),
+    linesBrightness: dual('linesBrightness', base.linesBrightness),
+    linesAlpha: dual('linesAlpha', base.linesAlpha),
+    linesWidth: dual('linesWidth', base.linesWidth),
+    spritesEnabled: bool('spritesEnabled', base.spritesEnabled),
+    spritesPacks: parseList(
+      params.get('spritesPacks'),
+      ALL_SPRITES_PACKS,
+      base.spritesPacks,
+    ),
+    spritesRotationEnabled: bool(
+      'spritesRotationEnabled',
+      base.spritesRotationEnabled,
+    ),
+    seamlessTextureEnabled: bool(
+      'seamlessTextureEnabled',
+      base.seamlessTextureEnabled,
+    ),
+    compositionModes: parseList(
+      params.get('compositionModes'),
+      ALL_COMPOSITION_MODES,
+      base.compositionModes,
+    ),
+  };
+}
+
+/**
+ * Serializes every setting into a query string. The result is the exact
+ * inverse of `getInitialValues()`'s parsing: each field is written explicitly,
+ * so reloading the resulting URL restores the current settings with nothing
+ * left to defaults or randomization.
+ */
+function serializeValues(values: Values): string {
+  const bool = (b: boolean): string => (b ? '1' : '0');
+  const dual = (d: NumberDual): string => `${d[0]},${d[1]}`;
+
+  const params = new URLSearchParams({
+    initialSeed: String(values.initialSeed),
+    iterations: String(values.iterations),
+    backgroundBrightness: String(values.backgroundBrightness),
+    rectEnabled: bool(values.rectEnabled),
+    rectBrightness: dual(values.rectBrightness),
+    rectAlpha: dual(values.rectAlpha),
+    rectScale: String(values.rectScale),
+    gridEnabled: bool(values.gridEnabled),
+    gridBrightness: dual(values.gridBrightness),
+    gridAlpha: dual(values.gridAlpha),
+    gridScale: String(values.gridScale),
+    gridAmount: dual(values.gridAmount),
+    gridGap: String(values.gridGap),
+    colsEnabled: bool(values.colsEnabled),
+    colsBrightness: dual(values.colsBrightness),
+    colsAlpha: dual(values.colsAlpha),
+    colsScale: String(values.colsScale),
+    colsAmount: dual(values.colsAmount),
+    colsGap: String(values.colsGap),
+    rowsEnabled: bool(values.rowsEnabled),
+    rowsBrightness: dual(values.rowsBrightness),
+    rowsAlpha: dual(values.rowsAlpha),
+    rowsScale: String(values.rowsScale),
+    rowsAmount: dual(values.rowsAmount),
+    rowsGap: String(values.rowsGap),
+    linesEnabled: bool(values.linesEnabled),
+    linesBrightness: dual(values.linesBrightness),
+    linesAlpha: dual(values.linesAlpha),
+    linesWidth: dual(values.linesWidth),
+    spritesEnabled: bool(values.spritesEnabled),
+    spritesPacks: values.spritesPacks.join(','),
+    spritesRotationEnabled: bool(values.spritesRotationEnabled),
+    seamlessTextureEnabled: bool(values.seamlessTextureEnabled),
+    compositionModes: values.compositionModes.join(','),
+  });
+
+  return params.toString();
+}

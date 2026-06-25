@@ -2,7 +2,7 @@ import {type NumberDual} from '@/types';
 import {animateWithSubIterations} from '@/utils/animationFrame';
 import {degreesToRadians} from '@/utils/math';
 import {xxx, xxxa} from '@/utils/colors';
-import {randomBoolean, randomInteger, randomItem} from '@/utils/random';
+import {randomBoolean, randomInteger, randomItem, setSeed} from '@/utils/random';
 import {getCanvasDimensions} from './getCanvasDimensions';
 import {clearCanvas} from './clearCanvas';
 import {type CompositionMode} from '../../constants';
@@ -11,6 +11,7 @@ export const draw = async ({
   ctx2d,
   onEnd,
   props: {
+    initialSeed,
     iterations,
     backgroundBrightness,
     rectEnabled,
@@ -49,6 +50,7 @@ export const draw = async ({
   ctx2d: CanvasRenderingContext2D;
   onEnd: (renderTimeMs: number) => void;
   props: {
+    initialSeed: number;
     iterations: number;
     backgroundBrightness: number;
     rectEnabled: boolean;
@@ -86,6 +88,7 @@ export const draw = async ({
 }): Promise<void> => {
   const renderStartTimeMs = performance.now();
 
+  setSeed(initialSeed);
   clearCanvas(ctx2d);
 
   drawBackground({ctx2d, backgroundBrightness});

@@ -97,6 +97,12 @@ const _gap: SettingConstant = {
 // CONSTANTS
 // -------------------
 
+export const initialSeed: SettingConstant = {
+  min: 0,
+  max: 99999,
+  default: 12345,
+  step: 1,
+};
 export const iterations: SettingConstant = {
   min: 10,
   max: 2000,

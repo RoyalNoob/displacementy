@@ -26,6 +26,7 @@ export function CanvasSection() {
   const [isPristine, setIsPristine] = useState<boolean>(true);
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [previewType, setPreviewType] = useState<PreviewType>('original');
+  const [justCopiedUrl, setJustCopiedUrl] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasOriginalPreviewDataUrl = useRef<string | undefined>(undefined);
@@ -39,6 +40,7 @@ export function CanvasSection() {
     const ctx2d = getCtx2dFromRef(canvasRef);
 
     const {
+      initialSeed,
       iterations,
       backgroundBrightness,
       rectEnabled,
@@ -79,6 +81,7 @@ export function CanvasSection() {
     void draw({
       ctx2d,
       props: {
+        initialSeed,
         iterations,
         backgroundBrightness,
         rectEnabled,
@@ -148,6 +151,19 @@ export function CanvasSection() {
       canvas,
       fileName: `DisplacementX_${width}x${height}_${dateTimeString()}`,
     });
+  };
+
+  const copyUrl = () => {
+    const query = useStore.getState().getSettingsQuery();
+    const url = `${window.location.origin}${window.location.pathname}?${query}`;
+    // Reflect the current settings in the address bar...
+    window.history.replaceState(null, '', url);
+    // ...and put the full shareable URL on the clipboard.
+    if (navigator.clipboard) {
+      void navigator.clipboard.writeText(url);
+    }
+    setJustCopiedUrl(true);
+    setTimeout(() => setJustCopiedUrl(false), 1500);
   };
 
   const quickRender = (callback: () => void) => {
@@ -230,6 +246,9 @@ export function CanvasSection() {
         </Button>
         <Button disabled={isPristine || isRendering} onClick={download}>
           Download
+        </Button>
+        <Button onClick={copyUrl}>
+          {justCopiedUrl ? 'Copied!' : 'Copy URL'}
         </Button>
       </div>
       <SubSection title='Resolution'>

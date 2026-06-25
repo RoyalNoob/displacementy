@@ -1,9 +1,24 @@
 import {type ColorRGB} from '../types';
 
+// Global seed for deterministic generation. Advances on every randomInteger call.
+export let seed = Math.floor(Math.random() * 0xffffffff);
+
+export const setSeed = (value: number): void => {
+  seed = value >>> 0;
+};
+
+// Mulberry32 — fast 32-bit seeded PRNG, returns a float in [0, 1)
+const nextFloat = (): number => {
+  seed = (seed + 0x6d2b79f5) >>> 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) >>> 0;
+  return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+};
+
 /**
  * Results with random boolean value
  */
-export const randomBoolean = (): boolean => Math.random() >= 0.5;
+export const randomBoolean = (): boolean => nextFloat() >= 0.5;
 
 export const randomColorRGB = (): ColorRGB => ({
   r: randomInteger(0, 255),
@@ -12,12 +27,13 @@ export const randomColorRGB = (): ColorRGB => ({
 });
 
 /**
- * Results with random integer value in [min..max] range (inclusive)
+ * Results with random integer value in [min..max] range (inclusive).
+ * Advances the global seed on each call.
  */
 export const randomInteger = (min: number, max: number): number => {
   min = Math.ceil(min);
   max = Math.floor(max);
-  return Math.floor(Math.random() * (max - min + 1) + min);
+  return Math.floor(nextFloat() * (max - min + 1) + min);
 };
 
 /**
