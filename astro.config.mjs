@@ -3,9 +3,12 @@ import {defineConfig} from 'astro/config';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
+import cloudflare from "@astrojs/cloudflare";
+
 // https://astro.build/config
 export default defineConfig({
   integrations: [react()],
+
   vite: {
     plugins: [
       // This most probably started to happen due to some Vite v6 / v7 discrepancies.
@@ -14,4 +17,6 @@ export default defineConfig({
       tailwindcss(),
     ],
   },
+
+  adapter: cloudflare()
 });
