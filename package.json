@@ -5,14 +5,17 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "npm run build && wrangler dev",
     "astro": "astro",
     "test:types": "tsc --noEmit",
     "test:units": "vitest",
     "test:format": "prettier . --check",
-    "format": "prettier . --write"
+    "format": "prettier . --write",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "12",
     "@radix-ui/react-checkbox": "1.3.2",
     "@radix-ui/react-icons": "1.3.2",
     "@radix-ui/react-radio-group": "1.3.7",
@@ -38,6 +41,7 @@
     "prettier-plugin-tailwindcss": "0.6.13",
     "tailwindcss": "4.1.10",
     "typescript": "5.8.3",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.6",
+    "wrangler": "^4.104.0"
   }
 }
