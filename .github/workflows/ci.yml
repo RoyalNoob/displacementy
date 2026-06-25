@@ -40,7 +40,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy ./dist --project-name=displacementx
+          command: pages deploy ./dist --project-name=displacementy
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

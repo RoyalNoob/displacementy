@@ -6,7 +6,7 @@ export function Generator() {
   return (
     <div className='mx-auto max-w-screen-2xl'>
       <header className='p-4'>
-        <h1 className='text-2xl select-none sm:text-3xl'>Displacement X</h1>
+        <h1 className='text-2xl select-none sm:text-3xl'>Displacement Y</h1>
         <span className='text-xs text-white/50'>{`v${softwareVersion}`}</span>
       </header>
       <main className='flex flex-col gap-8 px-4 pb-4 sm:flex-row sm:gap-6'>

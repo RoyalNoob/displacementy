@@ -149,7 +149,7 @@ export function CanvasSection() {
 
     saveImage({
       canvas,
-      fileName: `DisplacementX_${width}x${height}_${dateTimeString()}`,
+      fileName: `DisplacementY_${width}x${height}_${dateTimeString()}`,
     });
   };
 

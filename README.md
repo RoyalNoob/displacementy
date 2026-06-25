@@ -2,9 +2,9 @@
 
 Procedural displacement sci-fi maps generator. Web-based alternative to [JSplacement](https://www.google.com/search?q=JSplacement) for [Blender](https://www.blender.org/).
 
-Live at ▶ **[displacementx.pages.dev](https://displacementx.pages.dev/)**
+Live at ▶ **[displacementy.pages.dev](https://displacementy.pages.dev/)**
 
-<img src="./public/og.png" alt="Displacement X - social image preview"/>
+<img src="./public/og.png" alt="Displacement Y - social image preview"/>
 
 ## FAQ
 

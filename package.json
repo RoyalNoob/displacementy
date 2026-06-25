@@ -1,6 +1,6 @@
 {
-  "name": "displacementx",
-  "version": "0.5.0",
+  "name": "displacementy",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "astro dev",
