@@ -26,7 +26,7 @@ export function LockButton({locked, onToggle, label}: LockButtonProps) {
       }
       className={clsx(
         'inline-flex h-4 w-4 shrink-0 cursor-default items-center justify-center outline-hidden focus-visible:ring-1 focus-visible:ring-sky focus-visible:ring-offset-1 focus-visible:ring-offset-sky',
-        locked ? 'text-pink' : 'text-white/30 hover:text-white/70',
+        locked ? 'text-pink' : 'text-white/70 hover:text-white',
       )}
     >
       {locked ? <LockClosedIcon /> : <LockOpen1Icon />}
