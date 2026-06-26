@@ -172,216 +172,332 @@ const ALL_COMPOSITION_MODES: CompositionMode[] = [
   'xor',
 ];
 
-export const useStore = create<Values & Setters & ComputedValues & Actions>(
-  (set, get) => ({
-    // Values
-    // ---
-    // Always start from the deterministic defaults so SSR and the first client
-    // render match. The real values (URL params or a random set) are applied
-    // client-side via `initializeValues()` after hydration.
-    ...defaultValues(),
-    // Setters
-    // ---
-    setInitialSeed(initialSeed: Values['initialSeed']) {
-      set(() => ({initialSeed}));
-    },
-    setIterations(iterations: Values['iterations']) {
-      set(() => ({iterations}));
-    },
-    setBackgroundBrightness(
-      backgroundBrightness: Values['backgroundBrightness'],
-    ) {
-      set(() => ({backgroundBrightness}));
-    },
-    setRectEnabled(rectEnabled: Values['rectEnabled']) {
-      set(() => ({rectEnabled}));
-    },
-    setRectBrightness(rectBrightness: Values['rectBrightness']) {
-      set(() => ({rectBrightness}));
-    },
-    setRectAlpha(rectAlpha: Values['rectAlpha']) {
-      set(() => ({rectAlpha}));
-    },
-    setRectScale(rectScale: Values['rectScale']) {
-      set(() => ({rectScale}));
-    },
-    setGridEnabled(gridEnabled: Values['gridEnabled']) {
-      set(() => ({gridEnabled}));
-    },
-    setGridBrightness(gridBrightness: Values['gridBrightness']) {
-      set(() => ({gridBrightness}));
-    },
-    setGridAlpha(gridAlpha: Values['gridAlpha']) {
-      set(() => ({gridAlpha}));
-    },
-    setGridScale(gridScale: Values['gridScale']) {
-      set(() => ({gridScale}));
-    },
-    setGridAmount(gridAmount: Values['gridAmount']) {
-      set(() => ({gridAmount}));
-    },
-    setGridGap(gridGap: Values['gridGap']) {
-      set(() => ({gridGap}));
-    },
-    setColsEnabled(colsEnabled: Values['colsEnabled']) {
-      set(() => ({colsEnabled}));
-    },
-    setColsBrightness(colsBrightness: Values['colsBrightness']) {
-      set(() => ({colsBrightness}));
-    },
-    setColsAlpha(colsAlpha: Values['colsAlpha']) {
-      set(() => ({colsAlpha}));
-    },
-    setColsScale(colsScale: Values['colsScale']) {
-      set(() => ({colsScale}));
-    },
-    setColsAmount(colsAmount: Values['colsAmount']) {
-      set(() => ({colsAmount}));
-    },
-    setColsGap(colsGap: Values['colsGap']) {
-      set(() => ({colsGap}));
-    },
-    setRowsEnabled(rowsEnabled: Values['rowsEnabled']) {
-      set(() => ({rowsEnabled}));
-    },
-    setRowsBrightness(rowsBrightness: Values['rowsBrightness']) {
-      set(() => ({rowsBrightness}));
-    },
-    setRowsAlpha(rowsAlpha: Values['rowsAlpha']) {
-      set(() => ({rowsAlpha}));
-    },
-    setRowsScale(rowsScale: Values['rowsScale']) {
-      set(() => ({rowsScale}));
-    },
-    setRowsAmount(rowsAmount: Values['rowsAmount']) {
-      set(() => ({rowsAmount}));
-    },
-    setRowsGap(rowsGap: Values['rowsGap']) {
-      set(() => ({rowsGap}));
-    },
-    setLinesEnabled(linesEnabled: Values['linesEnabled']) {
-      set(() => ({linesEnabled}));
-    },
-    setLinesBrightness(linesBrightness: Values['linesBrightness']) {
-      set(() => ({linesBrightness}));
-    },
-    setLinesAlpha(linesAlpha: Values['linesAlpha']) {
-      set(() => ({linesAlpha}));
-    },
-    setLinesWidth(linesWidth: Values['linesWidth']) {
-      set(() => ({linesWidth}));
-    },
-    setSpritesEnabled(spritesEnabled: Values['spritesEnabled']) {
-      set(() => ({spritesEnabled}));
-    },
-    setSpritesPacks(spritesPacks: Values['spritesPacks']) {
-      set(() => ({spritesPacks}));
-    },
-    setSpritesRotationEnabled(
-      spritesRotationEnabled: Values['spritesRotationEnabled'],
-    ) {
-      set(() => ({spritesRotationEnabled}));
-    },
-    setseamlessTextureEnabled(
-      seamlessTextureEnabled: Values['seamlessTextureEnabled'],
-    ) {
-      set(() => ({seamlessTextureEnabled}));
-    },
-    setCompositionModes(compositionModes: Values['compositionModes']) {
-      set(() => ({compositionModes}));
-    },
-    // ComputedValues
-    // ---
-    getSprites() {
-      const spritesBaseUrl = '/sprites';
-      const {spritesPacks} = get();
-      const sprites: HTMLImageElement[] = [];
+/**
+ * Every setting that `randomize()` assigns a random value to — i.e. everything
+ * in `Values` except `seamlessTextureEnabled` (which is never randomized). These
+ * are the parameters that can be locked. `as const satisfies (keyof Values)[]`
+ * keeps the list and the `LockableKey` type in sync and rejects typos.
+ * Declared above `create()` so it is initialized before the store initializer
+ * (which calls `allUnlocked()`) runs.
+ */
+export const LOCKABLE_KEYS = [
+  'initialSeed',
+  'iterations',
+  'backgroundBrightness',
+  'rectEnabled',
+  'rectBrightness',
+  'rectAlpha',
+  'rectScale',
+  'gridEnabled',
+  'gridBrightness',
+  'gridAlpha',
+  'gridScale',
+  'gridAmount',
+  'gridGap',
+  'colsEnabled',
+  'colsBrightness',
+  'colsAlpha',
+  'colsScale',
+  'colsAmount',
+  'colsGap',
+  'rowsEnabled',
+  'rowsBrightness',
+  'rowsAlpha',
+  'rowsScale',
+  'rowsAmount',
+  'rowsGap',
+  'linesEnabled',
+  'linesBrightness',
+  'linesAlpha',
+  'linesWidth',
+  'spritesEnabled',
+  'spritesPacks',
+  'spritesRotationEnabled',
+  'compositionModes',
+] as const satisfies (keyof Values)[];
 
-      const hasClassic = spritesPacks.includes('classic');
-      const hasBigdata = spritesPacks.includes('bigdata');
-      const hasAggromaxx = spritesPacks.includes('aggromaxx');
-      const hasCrappack = spritesPacks.includes('crappack');
+export type LockableKey = (typeof LOCKABLE_KEYS)[number];
+export type Locks = Record<LockableKey, boolean>;
 
-      const addSprites = (pack: SpritesPack, n: number) => {
-        for (let i = 1; i <= n; i++) {
-          const sprite = new Image();
-          sprite.src = `${spritesBaseUrl}/${pack}/${i}.svg`;
-          sprites.push(sprite);
-        }
-      };
+type LockState = {
+  /** Which parameters are excluded from randomization. */
+  locks: Locks;
+  toggleLock: (key: LockableKey) => void;
+  setLock: (key: LockableKey, value: boolean) => void;
+};
 
-      if (hasClassic) addSprites('classic', 17);
-      if (hasBigdata) addSprites('bigdata', 5);
-      if (hasAggromaxx) addSprites('aggromaxx', 12);
-      if (hasCrappack) addSprites('crappack', 27);
+export const useStore = create<
+  Values & Setters & ComputedValues & Actions & LockState
+>((set, get) => ({
+  // Values
+  // ---
+  // Always start from the deterministic defaults so SSR and the first client
+  // render match. The real values (URL params or a random set) are applied
+  // client-side via `initializeValues()` after hydration.
+  ...defaultValues(),
+  locks: allUnlocked(),
+  // Setters
+  // ---
+  setInitialSeed(initialSeed: Values['initialSeed']) {
+    set(() => ({initialSeed}));
+  },
+  setIterations(iterations: Values['iterations']) {
+    set(() => ({iterations}));
+  },
+  setBackgroundBrightness(
+    backgroundBrightness: Values['backgroundBrightness'],
+  ) {
+    set(() => ({backgroundBrightness}));
+  },
+  setRectEnabled(rectEnabled: Values['rectEnabled']) {
+    set(() => ({rectEnabled}));
+  },
+  setRectBrightness(rectBrightness: Values['rectBrightness']) {
+    set(() => ({rectBrightness}));
+  },
+  setRectAlpha(rectAlpha: Values['rectAlpha']) {
+    set(() => ({rectAlpha}));
+  },
+  setRectScale(rectScale: Values['rectScale']) {
+    set(() => ({rectScale}));
+  },
+  setGridEnabled(gridEnabled: Values['gridEnabled']) {
+    set(() => ({gridEnabled}));
+  },
+  setGridBrightness(gridBrightness: Values['gridBrightness']) {
+    set(() => ({gridBrightness}));
+  },
+  setGridAlpha(gridAlpha: Values['gridAlpha']) {
+    set(() => ({gridAlpha}));
+  },
+  setGridScale(gridScale: Values['gridScale']) {
+    set(() => ({gridScale}));
+  },
+  setGridAmount(gridAmount: Values['gridAmount']) {
+    set(() => ({gridAmount}));
+  },
+  setGridGap(gridGap: Values['gridGap']) {
+    set(() => ({gridGap}));
+  },
+  setColsEnabled(colsEnabled: Values['colsEnabled']) {
+    set(() => ({colsEnabled}));
+  },
+  setColsBrightness(colsBrightness: Values['colsBrightness']) {
+    set(() => ({colsBrightness}));
+  },
+  setColsAlpha(colsAlpha: Values['colsAlpha']) {
+    set(() => ({colsAlpha}));
+  },
+  setColsScale(colsScale: Values['colsScale']) {
+    set(() => ({colsScale}));
+  },
+  setColsAmount(colsAmount: Values['colsAmount']) {
+    set(() => ({colsAmount}));
+  },
+  setColsGap(colsGap: Values['colsGap']) {
+    set(() => ({colsGap}));
+  },
+  setRowsEnabled(rowsEnabled: Values['rowsEnabled']) {
+    set(() => ({rowsEnabled}));
+  },
+  setRowsBrightness(rowsBrightness: Values['rowsBrightness']) {
+    set(() => ({rowsBrightness}));
+  },
+  setRowsAlpha(rowsAlpha: Values['rowsAlpha']) {
+    set(() => ({rowsAlpha}));
+  },
+  setRowsScale(rowsScale: Values['rowsScale']) {
+    set(() => ({rowsScale}));
+  },
+  setRowsAmount(rowsAmount: Values['rowsAmount']) {
+    set(() => ({rowsAmount}));
+  },
+  setRowsGap(rowsGap: Values['rowsGap']) {
+    set(() => ({rowsGap}));
+  },
+  setLinesEnabled(linesEnabled: Values['linesEnabled']) {
+    set(() => ({linesEnabled}));
+  },
+  setLinesBrightness(linesBrightness: Values['linesBrightness']) {
+    set(() => ({linesBrightness}));
+  },
+  setLinesAlpha(linesAlpha: Values['linesAlpha']) {
+    set(() => ({linesAlpha}));
+  },
+  setLinesWidth(linesWidth: Values['linesWidth']) {
+    set(() => ({linesWidth}));
+  },
+  setSpritesEnabled(spritesEnabled: Values['spritesEnabled']) {
+    set(() => ({spritesEnabled}));
+  },
+  setSpritesPacks(spritesPacks: Values['spritesPacks']) {
+    set(() => ({spritesPacks}));
+  },
+  setSpritesRotationEnabled(
+    spritesRotationEnabled: Values['spritesRotationEnabled'],
+  ) {
+    set(() => ({spritesRotationEnabled}));
+  },
+  setseamlessTextureEnabled(
+    seamlessTextureEnabled: Values['seamlessTextureEnabled'],
+  ) {
+    set(() => ({seamlessTextureEnabled}));
+  },
+  setCompositionModes(compositionModes: Values['compositionModes']) {
+    set(() => ({compositionModes}));
+  },
+  // ComputedValues
+  // ---
+  getSprites() {
+    const spritesBaseUrl = '/sprites';
+    const {spritesPacks} = get();
+    const sprites: HTMLImageElement[] = [];
 
-      return sprites;
-    },
-    getSettingsQuery() {
-      return serializeValues(get());
-    },
-    // Actions
-    // ---
-    initializeValues() {
-      set(() => getInitialValues());
-    },
-    randomize() {
-      set(() => randomValues());
-    },
-    randomizeRect() {
-      set(() => ({
-        rectBrightness: randDualSetting(rectBrightness),
-        rectAlpha: randDualSetting(rectAlpha),
-        rectScale: randSetting(rectScale),
-      }));
-    },
-    randomizeGrid() {
-      set(() => ({
-        gridBrightness: randDualSetting(gridBrightness),
-        gridAlpha: randDualSetting(gridAlpha),
-        gridScale: randSetting(gridScale),
-        gridAmount: randDualSetting(gridAmount),
-        gridGap: randSetting(gridGap),
-      }));
-    },
-    randomizeCols() {
-      set(() => ({
-        colsBrightness: randDualSetting(colsBrightness),
-        colsAlpha: randDualSetting(colsAlpha),
-        colsScale: randSetting(colsScale),
-        colsAmount: randDualSetting(colsAmount),
-        colsGap: randSetting(colsGap),
-      }));
-    },
-    randomizeRows() {
-      set(() => ({
-        rowsBrightness: randDualSetting(rowsBrightness),
-        rowsAlpha: randDualSetting(rowsAlpha),
-        rowsScale: randSetting(rowsScale),
-        rowsAmount: randDualSetting(rowsAmount),
-        rowsGap: randSetting(rowsGap),
-      }));
-    },
-    randomizeLines() {
-      set(() => ({
-        linesBrightness: randDualSetting(linesBrightness),
-        linesAlpha: randDualSetting(linesAlpha),
-        linesWidth: randDualSetting(linesWidth),
-      }));
-    },
-    randomizeSprites() {
-      set(() => ({
-        spritesPacks: randSpritesPacks(),
-        spritesRotationEnabled: randomBoolean(),
-      }));
-    },
-    randomizeCompositionModes() {
-      set(() => ({
-        compositionModes: randCompositionModes(),
-      }));
-    },
-  }),
-);
+    const hasClassic = spritesPacks.includes('classic');
+    const hasBigdata = spritesPacks.includes('bigdata');
+    const hasAggromaxx = spritesPacks.includes('aggromaxx');
+    const hasCrappack = spritesPacks.includes('crappack');
+
+    const addSprites = (pack: SpritesPack, n: number) => {
+      for (let i = 1; i <= n; i++) {
+        const sprite = new Image();
+        sprite.src = `${spritesBaseUrl}/${pack}/${i}.svg`;
+        sprites.push(sprite);
+      }
+    };
+
+    if (hasClassic) addSprites('classic', 17);
+    if (hasBigdata) addSprites('bigdata', 5);
+    if (hasAggromaxx) addSprites('aggromaxx', 12);
+    if (hasCrappack) addSprites('crappack', 27);
+
+    return sprites;
+  },
+  getSettingsQuery() {
+    const state = get();
+    return serializeValues(state, state.locks);
+  },
+  // Actions
+  // ---
+  initializeValues() {
+    set(() => getInitialValues());
+  },
+  toggleLock(key: LockableKey) {
+    set((state) => ({locks: {...state.locks, [key]: !state.locks[key]}}));
+  },
+  setLock(key: LockableKey, value: boolean) {
+    set((state) => ({locks: {...state.locks, [key]: value}}));
+  },
+  randomize() {
+    set((state) => applyLocks(randomValues(), state.locks));
+  },
+  randomizeRect() {
+    set((state) =>
+      applyLocks(
+        {
+          rectBrightness: randDualSetting(rectBrightness),
+          rectAlpha: randDualSetting(rectAlpha),
+          rectScale: randSetting(rectScale),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeGrid() {
+    set((state) =>
+      applyLocks(
+        {
+          gridBrightness: randDualSetting(gridBrightness),
+          gridAlpha: randDualSetting(gridAlpha),
+          gridScale: randSetting(gridScale),
+          gridAmount: randDualSetting(gridAmount),
+          gridGap: randSetting(gridGap),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeCols() {
+    set((state) =>
+      applyLocks(
+        {
+          colsBrightness: randDualSetting(colsBrightness),
+          colsAlpha: randDualSetting(colsAlpha),
+          colsScale: randSetting(colsScale),
+          colsAmount: randDualSetting(colsAmount),
+          colsGap: randSetting(colsGap),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeRows() {
+    set((state) =>
+      applyLocks(
+        {
+          rowsBrightness: randDualSetting(rowsBrightness),
+          rowsAlpha: randDualSetting(rowsAlpha),
+          rowsScale: randSetting(rowsScale),
+          rowsAmount: randDualSetting(rowsAmount),
+          rowsGap: randSetting(rowsGap),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeLines() {
+    set((state) =>
+      applyLocks(
+        {
+          linesBrightness: randDualSetting(linesBrightness),
+          linesAlpha: randDualSetting(linesAlpha),
+          linesWidth: randDualSetting(linesWidth),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeSprites() {
+    set((state) =>
+      applyLocks(
+        {
+          spritesPacks: randSpritesPacks(),
+          spritesRotationEnabled: randomBoolean(),
+        },
+        state.locks,
+      ),
+    );
+  },
+  randomizeCompositionModes() {
+    set((state) =>
+      applyLocks({compositionModes: randCompositionModes()}, state.locks),
+    );
+  },
+}));
+
+/** A fresh lock map with every lockable parameter unlocked. */
+function allUnlocked(): Locks {
+  const locks = {} as Locks;
+  for (const key of LOCKABLE_KEYS) locks[key] = false;
+  return locks;
+}
+
+/**
+ * Filters a would-be randomization patch down to the lockable keys that are
+ * currently unlocked. Keys that are locked (or not lockable, e.g.
+ * `seamlessTextureEnabled`) are dropped, so a `set()` of the result leaves them
+ * untouched. `Object.assign` with a computed key sidesteps TypeScript's
+ * indexed-union assignment limitation while staying type-safe at the boundary.
+ */
+function applyLocks(patch: Partial<Values>, locks: Locks): Partial<Values> {
+  const out: Partial<Values> = {};
+  for (const key of LOCKABLE_KEYS) {
+    if (key in patch && !locks[key]) {
+      Object.assign(out, {[key]: patch[key]});
+    }
+  }
+  return out;
+}
 
 function randSetting(setting: SettingConstant): number {
   return randomInteger(setting.min, setting.max);
@@ -530,11 +646,15 @@ function parseList<T extends string>(
  * matching the "fresh pattern on every refresh" behavior. The `window` guard is
  * defensive; this is only ever called client-side.
  */
-function getInitialValues(): Values {
-  if (typeof window === 'undefined') return defaultValues();
+function getInitialValues(): Values & {locks: Locks} {
+  if (typeof window === 'undefined') {
+    return {...defaultValues(), locks: allUnlocked()};
+  }
 
   const params = new URLSearchParams(window.location.search);
-  if ([...params.keys()].length === 0) return randomValues();
+  if ([...params.keys()].length === 0) {
+    return {...randomValues(), locks: allUnlocked()};
+  }
 
   const base = defaultValues();
   const num = (key: string, fallback: number) =>
@@ -596,7 +716,23 @@ function getInitialValues(): Values {
       ALL_COMPOSITION_MODES,
       base.compositionModes,
     ),
+    locks: parseLocks(params.get('locks')),
   };
+}
+
+/**
+ * Parses the `locks` query param — a comma-separated list of locked parameter
+ * names — into a full lock map. Unknown names are ignored (validated against
+ * `LOCKABLE_KEYS`); an absent or empty param means everything is unlocked.
+ */
+function parseLocks(raw: string | null): Locks {
+  const locks = allUnlocked();
+  if (!raw) return locks;
+  const items = raw.split(',').map((p) => p.trim());
+  for (const key of LOCKABLE_KEYS) {
+    if (items.includes(key)) locks[key] = true;
+  }
+  return locks;
 }
 
 /**
@@ -605,7 +741,7 @@ function getInitialValues(): Values {
  * so reloading the resulting URL restores the current settings with nothing
  * left to defaults or randomization.
  */
-function serializeValues(values: Values): string {
+function serializeValues(values: Values, locks: Locks): string {
   const bool = (b: boolean): string => (b ? '1' : '0');
   const dual = (d: NumberDual): string => `${d[0]},${d[1]}`;
 
@@ -644,6 +780,7 @@ function serializeValues(values: Values): string {
     spritesRotationEnabled: bool(values.spritesRotationEnabled),
     seamlessTextureEnabled: bool(values.seamlessTextureEnabled),
     compositionModes: values.compositionModes.join(','),
+    locks: LOCKABLE_KEYS.filter((key) => locks[key]).join(','),
   });
 
   return params.toString();

@@ -1,5 +1,6 @@
 import {useId} from 'react';
 import * as RadixSlider from '@radix-ui/react-slider';
+import {LockButton} from '@/components/ui/LockButton';
 import {type NumberDual} from '@/types';
 
 type SliderBaseProps = {
@@ -7,6 +8,8 @@ type SliderBaseProps = {
   readonly min: number;
   readonly max: number;
   readonly step: number;
+  readonly locked?: boolean;
+  readonly onToggleLock?: () => void;
 };
 
 type SliderSoloProps = SliderBaseProps & {
@@ -23,14 +26,31 @@ type SliderDualProps = SliderBaseProps & {
 
 type SliderProps = SliderSoloProps | SliderDualProps;
 
-export function Slider({label, min, max, step, ...dynamicProps}: SliderProps) {
+export function Slider({
+  label,
+  min,
+  max,
+  step,
+  locked,
+  onToggleLock,
+  ...dynamicProps
+}: SliderProps) {
   const labelId = useId();
   const thumb0Id = useId();
   const thumb1Id = useId();
   return (
     <div className='w-full text-sm select-none'>
       <div className='flex items-center justify-between'>
-        <label id={labelId}>{label}</label>
+        <div className='flex items-center gap-1'>
+          {onToggleLock && (
+            <LockButton
+              locked={Boolean(locked)}
+              onToggle={onToggleLock}
+              label={label}
+            />
+          )}
+          <label id={labelId}>{label}</label>
+        </div>
         <div>
           {dynamicProps.dual ? (
             <>

@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import {Switch} from '@/components/ui/Switch';
+import {LockButton} from '@/components/ui/LockButton';
 
 type GroupCommonProps = {
   readonly title: string;
@@ -14,6 +15,8 @@ type GroupWithSwitchProps = GroupCommonProps & {
   withSwitch: true;
   readonly enabled: boolean;
   readonly setEnabled: (enabled: boolean) => void;
+  readonly locked?: boolean;
+  readonly onToggleLock?: () => void;
 };
 
 type GroupProps = GroupBaseProps | GroupWithSwitchProps;
@@ -31,7 +34,16 @@ export function Group(props: GroupProps) {
           {props.title}
         </div>
         {props.withSwitch && (
-          <Switch isOn={props.enabled} setIsOn={props.setEnabled} />
+          <div className='flex items-center gap-2'>
+            {props.onToggleLock && (
+              <LockButton
+                locked={Boolean(props.locked)}
+                onToggle={props.onToggleLock}
+                label={props.title}
+              />
+            )}
+            <Switch isOn={props.enabled} setIsOn={props.setEnabled} />
+          </div>
         )}
       </div>
       <div

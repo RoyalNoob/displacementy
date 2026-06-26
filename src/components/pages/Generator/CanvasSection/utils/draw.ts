@@ -2,7 +2,12 @@ import {type NumberDual} from '@/types';
 import {animateWithSubIterations} from '@/utils/animationFrame';
 import {degreesToRadians} from '@/utils/math';
 import {xxx, xxxa} from '@/utils/colors';
-import {randomBoolean, randomInteger, randomItem, setSeed} from '@/utils/random';
+import {
+  randomBoolean,
+  randomInteger,
+  randomItem,
+  setSeed,
+} from '@/utils/random';
 import {getCanvasDimensions} from './getCanvasDimensions';
 import {clearCanvas} from './clearCanvas';
 import {type CompositionMode} from '../../constants';

@@ -4,6 +4,8 @@ import {type NumberDual} from '@/types';
 
 type SliderForConstantCommonProps = {
   readonly label: string;
+  readonly locked?: boolean;
+  readonly onToggleLock?: () => void;
 };
 
 type SliderForConstantSingleProps = {
@@ -25,7 +27,7 @@ type SliderForConstantProps = SliderForConstantCommonProps &
 
 export function SliderForConstant(props: SliderForConstantProps) {
   if (props.dual) {
-    const {label, constant, values, setValues} = props;
+    const {label, constant, values, setValues, locked, onToggleLock} = props;
     return (
       <Slider
         dual
@@ -35,11 +37,13 @@ export function SliderForConstant(props: SliderForConstantProps) {
         step={constant.step}
         values={values}
         setValues={setValues}
+        locked={locked}
+        onToggleLock={onToggleLock}
       />
     );
   }
 
-  const {label, constant, value, setValue} = props;
+  const {label, constant, value, setValue, locked, onToggleLock} = props;
   return (
     <Slider
       label={label}
@@ -48,6 +52,8 @@ export function SliderForConstant(props: SliderForConstantProps) {
       step={constant.step}
       value={value}
       setValue={setValue}
+      locked={locked}
+      onToggleLock={onToggleLock}
     />
   );
 }

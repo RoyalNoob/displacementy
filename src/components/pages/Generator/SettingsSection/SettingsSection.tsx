@@ -1,7 +1,7 @@
 'use client';
 import {Button} from '@/components/ui/Button';
 import {Checkbox} from '@/components/ui/Checkbox';
-import {useStore} from '../store';
+import {useStore, type LockableKey} from '../store';
 import {SectionTitle} from '../SectionTitle';
 import {
   initialSeed as initialSeedConst,
@@ -132,6 +132,17 @@ export function SettingsSection() {
     (state) => state.setSpritesRotationEnabled,
   );
 
+  const locks = useStore((state) => state.locks);
+  const toggleLock = useStore((state) => state.toggleLock);
+
+  // Spreadable lock props for any lockable control.
+  const lockProps = (key: LockableKey) => ({
+    locked: locks[key],
+    onToggleLock: () => {
+      toggleLock(key);
+    },
+  });
+
   const randomize = useStore((state) => state.randomize);
   const randomizeRect = useStore((state) => state.randomizeRect);
   const randomizeGrid = useStore((state) => state.randomizeGrid);
@@ -157,18 +168,21 @@ export function SettingsSection() {
               value={initialSeed}
               setValue={setInitialSeed}
               constant={initialSeedConst}
+              {...lockProps('initialSeed')}
             />
             <SliderForConstant
               label='Iterations'
               value={iterations}
               setValue={setIterations}
               constant={iterationsConst}
+              {...lockProps('iterations')}
             />
             <SliderForConstant
               label='Background brightness'
               value={backgroundBrightness}
               setValue={setBackgroundBrightness}
               constant={backgroundBrightnessConst}
+              {...lockProps('backgroundBrightness')}
             />
           </SlidersGroup>
           <Checkbox
@@ -182,6 +196,7 @@ export function SettingsSection() {
           title='Rect'
           enabled={rectEnabled}
           setEnabled={setRectEnabled}
+          {...lockProps('rectEnabled')}
         >
           <RandomizeButton onClick={randomizeRect} />
           <SlidersGroup>
@@ -191,6 +206,7 @@ export function SettingsSection() {
               values={rectBrightness}
               setValues={setRectBrightness}
               constant={rectBrightnessConst}
+              {...lockProps('rectBrightness')}
             />
             <SliderForConstant
               dual
@@ -198,12 +214,14 @@ export function SettingsSection() {
               values={rectAlpha}
               setValues={setRectAlpha}
               constant={rectAlphaConst}
+              {...lockProps('rectAlpha')}
             />
             <SliderForConstant
               label='Scale'
               value={rectScale}
               setValue={setRectScale}
               constant={rectScaleConst}
+              {...lockProps('rectScale')}
             />
           </SlidersGroup>
         </Group>
@@ -212,6 +230,7 @@ export function SettingsSection() {
           title='Grid'
           enabled={gridEnabled}
           setEnabled={setGridEnabled}
+          {...lockProps('gridEnabled')}
         >
           <RandomizeButton onClick={randomizeGrid} />
           <SlidersGroup>
@@ -221,6 +240,7 @@ export function SettingsSection() {
               values={gridBrightness}
               setValues={setGridBrightness}
               constant={gridBrightnessConst}
+              {...lockProps('gridBrightness')}
             />
             <SliderForConstant
               dual
@@ -228,12 +248,14 @@ export function SettingsSection() {
               values={gridAlpha}
               setValues={setGridAlpha}
               constant={gridAlphaConst}
+              {...lockProps('gridAlpha')}
             />
             <SliderForConstant
               label='Scale'
               value={gridScale}
               setValue={setGridScale}
               constant={gridScaleConst}
+              {...lockProps('gridScale')}
             />
             <SliderForConstant
               dual
@@ -241,12 +263,14 @@ export function SettingsSection() {
               values={gridAmount}
               setValues={setGridAmount}
               constant={gridAmountConst}
+              {...lockProps('gridAmount')}
             />
             <SliderForConstant
               label='Gap'
               value={gridGap}
               setValue={setGridGap}
               constant={gridGapConst}
+              {...lockProps('gridGap')}
             />
           </SlidersGroup>
         </Group>
@@ -255,6 +279,7 @@ export function SettingsSection() {
           title='Cols'
           enabled={colsEnabled}
           setEnabled={setColsEnabled}
+          {...lockProps('colsEnabled')}
         >
           <RandomizeButton onClick={randomizeCols} />
           <SlidersGroup>
@@ -264,6 +289,7 @@ export function SettingsSection() {
               values={colsBrightness}
               setValues={setColsBrightness}
               constant={colsBrightnessConst}
+              {...lockProps('colsBrightness')}
             />
             <SliderForConstant
               dual
@@ -271,12 +297,14 @@ export function SettingsSection() {
               values={colsAlpha}
               setValues={setColsAlpha}
               constant={colsAlphaConst}
+              {...lockProps('colsAlpha')}
             />
             <SliderForConstant
               label='Scale'
               value={colsScale}
               setValue={setColsScale}
               constant={colsScaleConst}
+              {...lockProps('colsScale')}
             />
             <SliderForConstant
               dual
@@ -284,12 +312,14 @@ export function SettingsSection() {
               values={colsAmount}
               setValues={setColsAmount}
               constant={colsAmountConst}
+              {...lockProps('colsAmount')}
             />
             <SliderForConstant
               label='Gap'
               value={colsGap}
               setValue={setColsGap}
               constant={colsGapConst}
+              {...lockProps('colsGap')}
             />
           </SlidersGroup>
         </Group>
@@ -298,6 +328,7 @@ export function SettingsSection() {
           title='Rows'
           enabled={rowsEnabled}
           setEnabled={setRowsEnabled}
+          {...lockProps('rowsEnabled')}
         >
           <RandomizeButton onClick={randomizeRows} />
           <SlidersGroup>
@@ -307,6 +338,7 @@ export function SettingsSection() {
               values={rowsBrightness}
               setValues={setRowsBrightness}
               constant={rowsBrightnessConst}
+              {...lockProps('rowsBrightness')}
             />
             <SliderForConstant
               dual
@@ -314,12 +346,14 @@ export function SettingsSection() {
               values={rowsAlpha}
               setValues={setRowsAlpha}
               constant={rowsAlphaConst}
+              {...lockProps('rowsAlpha')}
             />
             <SliderForConstant
               label='Scale'
               value={rowsScale}
               setValue={setRowsScale}
               constant={rowsScaleConst}
+              {...lockProps('rowsScale')}
             />
             <SliderForConstant
               dual
@@ -327,12 +361,14 @@ export function SettingsSection() {
               values={rowsAmount}
               setValues={setRowsAmount}
               constant={rowsAmountConst}
+              {...lockProps('rowsAmount')}
             />
             <SliderForConstant
               label='Gap'
               value={rowsGap}
               setValue={setRowsGap}
               constant={rowsGapConst}
+              {...lockProps('rowsGap')}
             />
           </SlidersGroup>
         </Group>
@@ -341,6 +377,7 @@ export function SettingsSection() {
           title='Lines'
           enabled={linesEnabled}
           setEnabled={setLinesEnabled}
+          {...lockProps('linesEnabled')}
         >
           <RandomizeButton onClick={randomizeLines} />
           <SlidersGroup>
@@ -350,6 +387,7 @@ export function SettingsSection() {
               values={linesBrightness}
               setValues={setLinesBrightness}
               constant={linesBrightnessConst}
+              {...lockProps('linesBrightness')}
             />
             <SliderForConstant
               dual
@@ -357,6 +395,7 @@ export function SettingsSection() {
               values={linesAlpha}
               setValues={setLinesAlpha}
               constant={linesAlphaConst}
+              {...lockProps('linesAlpha')}
             />
             <SliderForConstant
               dual
@@ -364,6 +403,7 @@ export function SettingsSection() {
               values={linesWidth}
               setValues={setLinesWidth}
               constant={linesWidthConst}
+              {...lockProps('linesWidth')}
             />
           </SlidersGroup>
         </Group>
@@ -372,9 +412,15 @@ export function SettingsSection() {
           title='Sprites'
           enabled={spritesEnabled}
           setEnabled={setSpritesEnabled}
+          {...lockProps('spritesEnabled')}
         >
           <RandomizeButton onClick={randomizeSprites} />
-          <CheckboxesGroup title='Packs' extra='Powered by JSplacement'>
+          <CheckboxesGroup
+            title='Packs'
+            extra='Powered by JSplacement'
+            lockLabel='Sprite packs'
+            {...lockProps('spritesPacks')}
+          >
             <Checkboxes<SpritesPack>
               items={[
                 {label: 'Classic', value: 'classic'},
@@ -391,12 +437,16 @@ export function SettingsSection() {
               label='Rotate'
               isChecked={spritesRotationEnabled}
               setIsChecked={setSpritesRotationEnabled}
+              {...lockProps('spritesRotationEnabled')}
             />
           </CheckboxesGroup>
         </Group>
         <Group title='Other'>
           <RandomizeButton onClick={randomizeCompositionModes} />
-          <CheckboxesGroup title='Composition modes'>
+          <CheckboxesGroup
+            title='Composition modes'
+            {...lockProps('compositionModes')}
+          >
             <Checkboxes<CompositionMode>
               items={[
                 {label: 'color-burn', value: 'color-burn'},

@@ -1,14 +1,23 @@
 import {useId} from 'react';
 import * as RadixCheckbox from '@radix-ui/react-checkbox';
 import {CheckIcon} from '@radix-ui/react-icons';
+import {LockButton} from '@/components/ui/LockButton';
 
 type CheckboxProps = {
   readonly label: string;
   readonly isChecked: boolean;
   readonly setIsChecked: (checked: boolean) => void;
+  readonly locked?: boolean;
+  readonly onToggleLock?: () => void;
 };
 
-export function Checkbox({label, isChecked, setIsChecked}: CheckboxProps) {
+export function Checkbox({
+  label,
+  isChecked,
+  setIsChecked,
+  locked,
+  onToggleLock,
+}: CheckboxProps) {
   const id = useId();
   return (
     <div className='flex items-center'>
@@ -28,6 +37,15 @@ export function Checkbox({label, isChecked, setIsChecked}: CheckboxProps) {
       <label className='pl-1 text-sm text-white select-none' htmlFor={id}>
         {label}
       </label>
+      {onToggleLock && (
+        <span className='pl-1'>
+          <LockButton
+            locked={Boolean(locked)}
+            onToggle={onToggleLock}
+            label={label}
+          />
+        </span>
+      )}
     </div>
   );
 }
