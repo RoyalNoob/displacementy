@@ -25,7 +25,7 @@ You can also lock some of the parameters so that randomization will only effect 
 ### Why not just work on `Displacement X`? Why the fork and name change?
 
 1. I don't want to go through the whole pull request process. I just want to make some changes for my own need.
-2. All the changes are coded by AI. I don't want to "taint" the original code base, considering peoples opinion on AI nowadays.
+2. All the changes are coded by AI and I don't want to "taint" the original code base.
 
 
 ### Any future plans for `Displacement Y`?
