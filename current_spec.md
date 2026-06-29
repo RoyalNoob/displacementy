@@ -1,8 +1,25 @@
 # Spec — CPU Float-Precision Rendering Core (for true 16-bit export)
 
-> Status: **Phase 0 implemented; Phases A–D pending.** This is the active spec.
-> (The prior parameter-locks spec was fully implemented and removed; the code is
-> its record.)
+> Status: **Phases 0 + A implemented; Phases B–D pending.** This is the active
+> spec. (The prior parameter-locks spec was fully implemented and removed; the
+> code is its record.)
+>
+> **Phase A note — buffer is value + alpha, not value-only.** Faithful
+> compositing (notably `xor`, which introduces transparency) requires tracking
+> straight alpha alongside the grayscale value. So the buffer is two
+> `Float32Array`s (value + alpha) ≈ **512 MB at 8192²** — heavier than the
+> value-only ~256 MB, still under the rejected RGBA ~1 GiB. Refines Decision A.
+>
+> **Phase A implementation choice:** `draw.ts` is left **unchanged**; the float
+> core is a `FloatRenderTarget`
+> ([FloatRenderTarget.ts](src/components/pages/Generator/CanvasSection/utils/float/FloatRenderTarget.ts))
+> that implements the `CanvasRenderingContext2D` subset `draw()` uses and parses
+> the `xxx`/`xxxa` color strings. This keeps the determinism guard green with the
+> **identical hash**. Blend math lives in
+> [blendModes.ts](src/components/pages/Generator/CanvasSection/utils/float/blendModes.ts).
+> Sprites are no-ops until Phase B (enabling them renders nothing, no crash).
+> Integer rasterization means no sub-pixel edge anti-aliasing (≤1px edge
+> difference vs. canvas; irrelevant for heightmaps).
 
 ## Goal
 
@@ -165,9 +182,9 @@ comes only after the float core is proven correct.
 Correctness phases (in order):
 
 - **Phase 0 ✅ DONE** — Determinism guard test (op-trace hash per seed).
-- **Phase A** — Float buffer + background + rect/grid/cols/rows/lines + the 16
-  blend modes + 8-bit display path. (No sprites.) Runs on the main thread with the
-  existing rAF batching.
+- **Phase A ✅ DONE** — Float buffer (value + alpha) + background +
+  rect/grid/cols/rows/lines + the 16 blend modes + 8-bit display path. (No
+  sprites.) Runs on the main thread with the existing rAF batching.
 - **Phase B** — Sprites in the float pipeline.
 - **Phase C** — Export: 8 / 16-bit PNG + 32-bit float (raw first, EXR/TIFF later) +
   a bit-depth/format selector in the UI.

@@ -8,6 +8,7 @@ import {Canvas} from './Canvas';
 import {Gradient} from './Gradient';
 import {SubSection} from './SubSection';
 import {draw} from './utils/draw';
+import {FloatRenderTarget} from './utils/float/FloatRenderTarget';
 import {drawNormal} from './utils/drawNormal';
 import {drawColor} from './utils/drawColor';
 import {drawInvert} from './utils/drawInvert';
@@ -78,8 +79,13 @@ export function CanvasSection() {
 
     const sprites = getSprites();
 
+    // Accumulate in a 32-bit float buffer (the new core), then paint the
+    // quantized 8-bit result into the visible canvas. `draw()` is unchanged: the
+    // target implements the canvas subset it uses.
+    const target = new FloatRenderTarget(width, height);
+
     void draw({
-      ctx2d,
+      ctx2d: target as unknown as CanvasRenderingContext2D,
       props: {
         initialSeed,
         iterations,
@@ -117,6 +123,9 @@ export function CanvasSection() {
         seamlessTextureEnabled,
       },
       onEnd(renderTimeMs) {
+        // Paint the float buffer into the visible 8-bit canvas.
+        target.blitTo(ctx2d);
+
         // Set minumum "visible" render time to prevent very fast component updates (i.e., flickering)
         const minimumTimeBetweenUpdatesMs = 200;
         const update = () => {
