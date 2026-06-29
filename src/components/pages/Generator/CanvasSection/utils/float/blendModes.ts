@@ -60,23 +60,28 @@ const blend = (mode: CompositionMode, b: number, s: number): number => {
   }
 };
 
+/** Mutable result holder, to let `compositeInto` avoid per-pixel allocation. */
+export type CompositeResult = {v: number; a: number};
+
 /**
  * Composite a source sample (`srcV`, `srcA`) over a backdrop sample (`dstV`,
- * `dstA`) under `mode`, returning the resulting grayscale value + alpha.
+ * `dstA`) under `mode`, writing the resulting grayscale value + alpha into
+ * `out`. Writing into a caller-owned holder (rather than returning a new object)
+ * avoids allocating millions of short-lived objects in the per-pixel hot loop.
  */
-export const composite = (
+export const compositeInto = (
+  out: CompositeResult,
   mode: CompositionMode,
   dstV: number,
   dstA: number,
   srcV: number,
   srcA: number,
-): {v: number; a: number} => {
+): void => {
   // `lighter` is additive Porter-Duff (no division).
   if (mode === 'lighter') {
-    return {
-      v: clamp01(srcA * srcV + dstA * dstV),
-      a: clamp01(srcA + dstA),
-    };
+    out.v = clamp01(srcA * srcV + dstA * dstV);
+    out.a = clamp01(srcA + dstA);
+    return;
   }
 
   // Compositing coefficients (Fa, Fb) and the (possibly blended) source color.
@@ -103,7 +108,25 @@ export const composite = (
   }
 
   const ao = srcA * fa + dstA * fb;
-  if (ao <= 0) return {v: 0, a: 0};
+  if (ao <= 0) {
+    out.v = 0;
+    out.a = 0;
+    return;
+  }
   const co = srcA * fa * srcColor + dstA * fb * dstV;
-  return {v: clamp01(co / ao), a: clamp01(ao)};
+  out.v = clamp01(co / ao);
+  out.a = clamp01(ao);
+};
+
+/** Allocating convenience wrapper around {@link compositeInto} (for tests/readability). */
+export const composite = (
+  mode: CompositionMode,
+  dstV: number,
+  dstA: number,
+  srcV: number,
+  srcA: number,
+): CompositeResult => {
+  const out: CompositeResult = {v: 0, a: 0};
+  compositeInto(out, mode, dstV, dstA, srcV, srcA);
+  return out;
 };

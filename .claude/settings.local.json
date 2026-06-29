@@ -30,7 +30,11 @@
       "mcp__Claude_Preview__preview_start",
       "PowerShell(npx vitest run src/components/pages/Generator/CanvasSection/utils/draw.determinism.test.ts -u 2>&1)",
       "PowerShell(npx prettier --write \"src/components/pages/Generator/CanvasSection/utils/draw.determinism.test.ts\" \"current_spec.md\")",
-      "PowerShell(npx astro dev stop 2>$null)"
+      "PowerShell(npx astro dev stop 2>$null)",
+      "PowerShell(npx prettier --write \"src/components/pages/Generator/CanvasSection/utils/float/FloatRenderTarget.ts\" >$null 2>&1)",
+      "PowerShell(Write-Output \"=== grep for stray debug ===\"; \\(Select-String -Path \"src/components/pages/Generator/CanvasSection/utils/draw.ts\",\"src/components/pages/Generator/CanvasSection/utils/float/FloatRenderTarget.ts\" -Pattern \"\\\\[dbg\\\\]\" -SimpleMatch\\).Count; Write-Output \"=== TYPES ===\"; npm run test:types; Write-Output \"=== UNITS ===\"; npx vitest run 2>&1 | Select-Object -Last 5; Write-Output \"=== BUILD ===\"; npm run build 2>&1 | Select-Object -Last 2)",
+      "PowerShell(npx prettier --write \"src/components/pages/Generator/CanvasSection/utils/draw.ts\" \"src/components/pages/Generator/CanvasSection/utils/float/FloatRenderTarget.ts\" >$null 2>&1)",
+      "PowerShell(npx prettier --write \"src/components/pages/Generator/CanvasSection/utils/float/blendModes.ts\" \"src/components/pages/Generator/CanvasSection/utils/float/FloatRenderTarget.ts\" 2>&1)"
     ]
   }
 }

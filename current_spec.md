@@ -1,8 +1,27 @@
 # Spec — CPU Float-Precision Rendering Core (for true 16-bit export)
 
-> Status: **Phases 0 + A implemented; Phases B–D pending.** This is the active
-> spec. (The prior parameter-locks spec was fully implemented and removed; the
-> code is its record.)
+> Status: **Phases 0 + A + B implemented; Phase B visual check pending; Phases
+> C–D pending.** This is the active spec. (The prior parameter-locks spec was
+> fully implemented and removed; the code is its record.)
+>
+> **Phase B note — sprites.** `FloatRenderTarget` implements
+> `translate`/`rotate`/`drawImage` by forwarding the transform to a reusable
+> offscreen 2D canvas (which rasterizes the SVG + applies scale/rotation/AA
+> exactly as the old renderer), then blends the sprite's bbox pixels into the
+> float buffer under the current mode. `draw.ts` stays unchanged. Sprite source
+> is read from the `r` channel (grayscale assumption). Unit-tested for blend
+> math + rasterization; type-checks, builds, determinism guard green. **Full
+> in-browser sprite screenshot is still pending** — the preview tab runs
+> `hidden`, where `requestAnimationFrame` is paused (0 ticks), so the rAF-driven
+> render loop cannot advance there. Verify in a real (visible) browser tab.
+>
+> **⚠ Performance finding (elevates Phase D).** A 2048² render in the CPU-float
+> core takes **>30s** of synchronous compute (per-pixel JS compositing + per-sprite
+> `getImageData`/blend). This is far slower than the old native-canvas renderer and
+> is a real usability problem at the default resolution. Phase D (Web Worker +
+> dirty-rect/typed-array optimization, possibly chunked yielding) is now more
+> important than originally framed. The correctness work (A/B) stands; performance
+> must follow before this is shippable at 2048²+.
 >
 > **Phase A note — buffer is value + alpha, not value-only.** Faithful
 > compositing (notably `xor`, which introduces transparency) requires tracking
@@ -185,14 +204,37 @@ Correctness phases (in order):
 - **Phase A ✅ DONE** — Float buffer (value + alpha) + background +
   rect/grid/cols/rows/lines + the 16 blend modes + 8-bit display path. (No
   sprites.) Runs on the main thread with the existing rAF batching.
-- **Phase B** — Sprites in the float pipeline.
+- **Phase B ✅ DONE (visual check pending)** — Sprites in the float pipeline via
+  offscreen-canvas rasterization + float blend.
 - **Phase C** — Export: 8 / 16-bit PNG + 32-bit float (raw first, EXR/TIFF later) +
   a bit-depth/format selector in the UI.
 
 Later — performance stage (only after Phases 0–C are correct and verified):
 
-- **Phase D** — Move the core into a Web Worker for responsiveness; add tiling if
-  the memory/throughput budget requires it.
+- **Phase D (in progress)** — Performance, determinism-preserving:
+  - ✅ Eliminated per-pixel object allocation in the composite hot loop
+    (`compositeInto` writes into a reused scratch) — the single biggest compute
+    win, correctness-neutral (unit tests + determinism guard unchanged).
+  - ✅ `FloatRenderTarget` made Worker-safe — sprite rasterization uses
+    `OffscreenCanvas` (no `document`), and `drawImage` already accepts
+    `ImageBitmap`.
+  - ⬜ Move the render into a **Web Worker** (the big step). Plan:
+    1. Refactor the draw loop into a **synchronous** core (plain for-loop +
+       `onProgress`, no `requestAnimationFrame`) so it runs in a Worker. The op
+       sequence is unchanged → the determinism-guard hash must stay identical.
+       (Do not ship this on the main thread alone — a synchronous loop there would
+       freeze the UI; it must land together with the Worker.)
+    2. Main thread: rasterize the SVG sprites to transferable `ImageBitmap`s and
+       post `{props, spriteBitmaps, width, height}` to the Worker.
+    3. Worker: run the sync core into the float buffer, post chunked progress, and
+       transfer back the 8-bit RGBA (and later the float buffer for export).
+    4. Main thread: `putImageData` the result to the visible canvas; drive a
+       progress bar from the chunked messages.
+  - ⬜ Tiling only if the memory/throughput budget still requires it.
+  - **Bonus insight:** a Worker render does **not** use `requestAnimationFrame`,
+    so it is not subject to the hidden-tab rAF pause that blocked in-browser
+    verification — the Worker route should also make end-to-end verification work
+    again.
 
 ## Testing
 

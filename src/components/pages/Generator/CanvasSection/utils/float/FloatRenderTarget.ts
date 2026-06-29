@@ -1,15 +1,15 @@
 import {type CompositionMode} from '../../../constants';
-import {clamp01, composite} from './blendModes';
+import {clamp01, compositeInto, type CompositeResult} from './blendModes';
 
 /**
  * CPU float-precision rendering surface for the generator.
  *
  * It deliberately implements the small subset of `CanvasRenderingContext2D` that
  * `draw()` uses (`canvas`, `fillStyle`, `globalCompositeOperation`, `clearRect`,
- * `fillRect`, and no-op `drawImage`/`translate`/`rotate` until sprites land in
- * Phase B). This lets `draw()` stay byte-for-byte unchanged — so the Phase 0
- * determinism guard keeps passing with the identical hash — while accumulation
- * happens in 32-bit float instead of 8-bit canvas.
+ * `fillRect`, plus `drawImage`/`translate`/`rotate` for sprites). This lets
+ * `draw()` stay byte-for-byte unchanged — so the Phase 0 determinism guard keeps
+ * passing with the identical hash — while accumulation happens in 32-bit float
+ * instead of 8-bit canvas.
  *
  * Grayscale height is stored in `#value` (`0..1`) with straight alpha in
  * `#alpha` (needed for faithful `xor`/`source-atop` compositing).
@@ -23,6 +23,14 @@ export class FloatRenderTarget {
   #mode: CompositionMode = 'source-over';
   #fillV = 0;
   #fillA = 1;
+  // Offscreen 2D canvas used only for sprites: it rasterizes the image and
+  // applies the scale/rotation transform exactly as the old renderer did; we then
+  // blend its pixels into the float buffer. An `OffscreenCanvas` (not a DOM
+  // canvas) so the whole core can run inside a Web Worker. Created lazily so the
+  // sprite-free paths (and Node tests) never touch it.
+  #spriteCtx: OffscreenCanvasRenderingContext2D | undefined;
+  // Reused across every per-pixel composite so the hot loops allocate nothing.
+  readonly #scratch: CompositeResult = {v: 0, a: 0};
 
   constructor(width: number, height: number) {
     this.#w = width;
@@ -66,18 +74,114 @@ export class FloatRenderTarget {
       const row = py * this.#w;
       for (let px = x0; px < x1; px++) {
         const i = row + px;
-        const {v, a} = composite(mode, this.#value[i], this.#alpha[i], sv, sa);
-        this.#value[i] = v;
-        this.#alpha[i] = a;
+        compositeInto(
+          this.#scratch,
+          mode,
+          this.#value[i],
+          this.#alpha[i],
+          sv,
+          sa,
+        );
+        this.#value[i] = this.#scratch.v;
+        this.#alpha[i] = this.#scratch.a;
       }
     }
   }
 
-  // Sprites (Phase B): no-ops for now so enabling sprites does not crash — they
-  // simply do not render until Phase B implements image sampling.
-  drawImage(): void {}
-  translate(): void {}
-  rotate(): void {}
+  // Sprites: the transform calls are forwarded to the offscreen sprite canvas so
+  // its 2D context mirrors the transform `draw()` sets up (translate/rotate around
+  // the canvas centre, then the inverse afterwards).
+  translate(x: number, y: number): void {
+    this.#ensureSpriteCtx().translate(x, y);
+  }
+
+  rotate(angle: number): void {
+    this.#ensureSpriteCtx().rotate(angle);
+  }
+
+  /**
+   * Rasterize a sprite (with the current transform) on the offscreen canvas, then
+   * blend its pixels into the float buffer under the current composite mode. Only
+   * the transformed bounding box is read back.
+   */
+  drawImage(
+    img: CanvasImageSource,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void {
+    const ctx = this.#ensureSpriteCtx();
+
+    // Bounding box of the destination rect under the current transform.
+    const m = ctx.getTransform();
+    const corners = [
+      [dx, dy],
+      [dx + dw, dy],
+      [dx, dy + dh],
+      [dx + dw, dy + dh],
+    ];
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [px, py] of corners) {
+      const tx = m.a * px + m.c * py + m.e;
+      const ty = m.b * px + m.d * py + m.f;
+      minX = Math.min(minX, tx);
+      minY = Math.min(minY, ty);
+      maxX = Math.max(maxX, tx);
+      maxY = Math.max(maxY, ty);
+    }
+    const x0 = Math.max(0, Math.floor(minX));
+    const y0 = Math.max(0, Math.floor(minY));
+    const x1 = Math.min(this.#w, Math.ceil(maxX));
+    const y1 = Math.min(this.#h, Math.ceil(maxY));
+    if (x1 <= x0 || y1 <= y0) return;
+
+    const bw = x1 - x0;
+    const bh = y1 - y0;
+
+    // Clear only the bounding box (device space), preserving the active transform.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(x0, y0, bw, bh);
+    ctx.restore();
+
+    ctx.drawImage(img, dx, dy, dw, dh);
+
+    const region = ctx.getImageData(x0, y0, bw, bh).data;
+    const mode = this.#mode;
+    for (let ry = 0; ry < bh; ry++) {
+      for (let rx = 0; rx < bw; rx++) {
+        const ri = (ry * bw + rx) * 4;
+        const srcA = region[ri + 3] / 255;
+        if (srcA <= 0) continue; // sprites are mostly transparent
+        const srcV = region[ri] / 255; // grayscale sprites → r channel
+        const i = (y0 + ry) * this.#w + (x0 + rx);
+        compositeInto(
+          this.#scratch,
+          mode,
+          this.#value[i],
+          this.#alpha[i],
+          srcV,
+          srcA,
+        );
+        this.#value[i] = this.#scratch.v;
+        this.#alpha[i] = this.#scratch.a;
+      }
+    }
+  }
+
+  #ensureSpriteCtx(): OffscreenCanvasRenderingContext2D {
+    if (!this.#spriteCtx) {
+      const canvas = new OffscreenCanvas(this.#w, this.#h);
+      const ctx = canvas.getContext('2d', {willReadFrequently: true});
+      if (!ctx) throw new Error('Failed to create 2D context for sprites');
+      this.#spriteCtx = ctx;
+    }
+    return this.#spriteCtx;
+  }
 
   /** The float height buffer (`0..1`), for high-bit-depth export in Phase C. */
   get heights(): Float32Array {
