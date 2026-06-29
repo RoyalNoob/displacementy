@@ -1,10 +1,10 @@
 # Contributing guide
 
-Hi there! Thank you for your interest in contributing to this project.
+Thank you for your interest in contributing to this project.
 
-You can help in many ways, whether it's reporting bugs, suggesting enhancements, or contributing code. Also, I'd appreciate if you're building something with Displacement Y, so you can share your work.
+Currently I have no plan or the time to manage PR. You can help by reporting bugs or suggesting enhancements. If you really want to contribute code, please check out the original repo [Displacement X](https://github.com/satelllte/displacementx). Other than that, feel free to attribute me if you want to.
 
 Links:
 
-- [Log an issue](https://github.com/rl-at-mk/displacementy/issues/new/choose)
+- [Log an issue](https://github.com/RoyalNoob/displacementy/issues/new/choose)
 - [Development guide](./DEVELOPMENT.md)

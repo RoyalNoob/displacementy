@@ -1,38 +1,40 @@
 # Displacement Y
 
-Procedural displacement sci-fi maps generator. Web-based alternative to [JSplacement](https://www.google.com/search?q=JSplacement) for [Blender](https://www.blender.org/).
+Procedural deterministic displacement sci-fi maps generator.
+
+Forked from [Displacement X](https://github.com/satelllte/displacementx)
 
 Live at ▶ **[displacementy.pages.dev](https://displacementy.pages.dev/)**
 
-<img src="./public/og.png" alt="Displacement Y - social image preview"/>
+<img src="./public/banner.png" alt="Displacement Y - social image preview"/>
 
 ## FAQ
 
 ### What is it used for?
 
-The software can be used for generating grayscale height maps for their further application in various 3D rendering software such as Blender, Cinema4D, OctaneRender, etc.
+Generated height maps and normal maps can be used in 3D software or game engine, such as Houdini, Blender, Unreal, Unity etc.
 
-### Does it aim to replace the original `JSplacement` software?
+### What is the difference between this and `Displacement X`?
 
-No. The application doesn't aim to replace `JSplacement`, but rather to provide a web-based alternative for those who don't want to find its downloads online and install it. Features-wise, it implements some from `JSplacement`, but also has some that didn't exist in it before (e.g., "Composition modes" or "Custom gradient generator").
+Displacement Y is a fork of [Displacement X](https://github.com/satelllte/displacementx), with some extra features and UX changes.
 
-### What happened to the original `JSplacement` software?
+The biggest difference is that Displacement Y is "deterministic", i.e., it will produce the same result with the same settings. This allowed finer control and the sharing of results between sessions or users. You can also tune parameters in lower resolution, then render it in higher resolution later; the result will be visually identical.
 
-Unfortunately, the original `JSplacement` software is no longer maintained and it's gone. The author has abandoned the project and removed all the downloads from the internet.
+You can also lock some of the parameters so that randomization will only effect those that you allowed, providing greater control.
 
-Some links:
+### Why not just work on `Displacement X`? Why the fork and name change?
 
-- Reddit post: [What happened to JSplacement](https://www.reddit.com/r/blender/comments/zfwmjr/does_anyone_know_what_happened_to_jsplacement/).
-- Web port of `JSplacement`: [JSPlacementWeb](https://github.com/satelllte/JSPlacementWeb) _(missing some features)_.
-- Consider supporting `Windmill` - the author of `JSPlacement`: [Website](https://windmillart.net/), [PayPal/WMillArt](https://www.paypal.com/paypalme/WMillArt), [Ko-fi/windmill](https://ko-fi.com/windmill).
+1. I don't want to go through the whole pull request process. I just want to make some changes for my own need.
+2. All the changes are coded by AI and I don't want to "taint" the original code base.
+
 
 ### Any future plans for `Displacement Y`?
 
-No particular plans. I've opened the source code of this project to everyone, so let's see how it goes.
+There are several features planned, such as custom sprite pack, higher bit depth export, etc., but no promises.
 
 ### I want to share my work done with the help of `Displacement Y`. Where can I do that?
 
-Feel free to open an issue in this repository to share your work. I'd love to see what you've created and showcase it right here!
+I don't have anything setup yet, but feel free to link or attribute this repo or [displacementy.pages.dev](https://displacementy.pages.dev/).
 
 ## Contributing
 
