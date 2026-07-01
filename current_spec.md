@@ -285,8 +285,14 @@ Later — performance stage (only after Phases 0–C are correct and verified):
     progress bar + animated "Rendering NN%" indicator in the canvas overlay
     ([Canvas.tsx](src/components/pages/Generator/CanvasSection/Canvas/Canvas.tsx)).
     Verified smooth 0→100% on a multi-second render.
-  - ⬜ Tiling / further optimization only if a larger resolution needs it (8192²
-    not yet profiled post-Worker).
+  - ⬜ Tiling / further optimization only if a larger resolution needs it.
+    **8192² profiled (in-browser, default settings):** render **~28 s** (CPU float
+    core; the slow part, gated by the progress bar), map export **~8 s**, zip **29 MB**
+    (valid 8192² height/normal/color PNGs), main-thread peak heap **~308 MB**, no
+    OOM/crash. Conclusion: the pipeline is safe at max resolution; the only friction
+    is the ~28 s render, which is the pre-existing determinism-bound CPU core (only
+    the 8192² extreme; 2048² is sub-second). Tiling/live-forming remain optional
+    perf polish, not correctness/shippability blockers.
   - ⬜ **Optional later — "live forming" preview (cheap hybrid).** In addition to
     the progress bar, paint **2–3 coarse intermediate frames** (e.g. at ~33% and
     ~66%): inside `onProgress` at those thresholds, the Worker quantizes the float
@@ -485,7 +491,9 @@ generalizes to per-map params in the eventual options panel.
    at 8-bit tolerance.
 3. **16-bit fidelity:** a smooth synthetic input yields >256 distinct levels in the
    exported file; PNG validity + declared bit depth verified.
-4. **Memory:** 8192² render stays within budget.
+4. **Memory:** 8192² render stays within budget. ✅ Verified in-browser: full
+   render + 3-map zip export completes with no OOM/crash (main-thread peak heap
+   ~308 MB; large buffers live off-main-heap in the Workers).
 
 ## Decisions
 
