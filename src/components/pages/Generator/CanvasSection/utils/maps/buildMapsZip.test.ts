@@ -17,10 +17,9 @@ const baseParams = (w: number, h: number): BuildMapsZipParams => ({
   width: w,
   height: h,
   palette,
-  normalStrength: 1,
-  heightDepth: 16,
-  normalDepth: 8,
   include: {height: true, normal: true, color: true},
+  depths: {height: 16, normal: 8, color: 8},
+  params: {height: {}, normal: {strength: 1}, color: {}},
   memberNames: {
     height: 'test_height',
     normal: 'test_normal',
@@ -45,7 +44,7 @@ describe('buildMapsZip', () => {
     expect(height.width).toBe(w);
     expect(height.height).toBe(h);
     expect(height.channels).toBe(1);
-    expect(height.depth).toBe(16); // follows heightDepth
+    expect(height.depth).toBe(16); // follows depths.height
 
     const normal = decode(files['test_normal.png']);
     expect(normal.channels).toBe(3);
@@ -57,14 +56,16 @@ describe('buildMapsZip', () => {
   });
 
   it('honors the 8-bit height depth', () => {
-    const zip = buildMapsZip({...baseParams(4, 4), heightDepth: 8});
+    const p = baseParams(4, 4);
+    const zip = buildMapsZip({...p, depths: {...p.depths, height: 8}});
     const height = decode(unzipSync(zip)['test_height.png']);
     expect(height.depth).toBe(8);
     expect(height.channels).toBe(1);
   });
 
   it('emits a 16-bit RGB normal when requested', () => {
-    const zip = buildMapsZip({...baseParams(4, 4), normalDepth: 16});
+    const p = baseParams(4, 4);
+    const zip = buildMapsZip({...p, depths: {...p.depths, normal: 16}});
     const normal = decode(unzipSync(zip)['test_normal.png']);
     expect(normal.channels).toBe(3);
     expect(normal.depth).toBe(16);

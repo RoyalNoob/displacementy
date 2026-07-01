@@ -1,14 +1,9 @@
 import {encode} from 'fast-png';
 import {zipSync} from 'fflate';
-import {encodeHeightmap8, encodeHeightmap16} from '../heightmapPng';
-import {toNormalMapRGB8, toNormalMapRGB16} from './normalMap';
-import {toColorMapRGB8} from './colorMap';
+import {MAP_REGISTRY} from './registry';
+import {type MapDepth} from './types';
 
-export type MapDepth = 8 | 16;
-/** @deprecated alias kept for existing imports. */
-export type HeightDepth = MapDepth;
-
-export type MapKind = 'height' | 'normal' | 'color';
+export type {MapDepth} from './types';
 
 export type BuildMapsZipParams = {
   heights: Float32Array;
@@ -16,80 +11,55 @@ export type BuildMapsZipParams = {
   height: number;
   /** Gradient palette as RGB triplets (see `paletteFromRowRGBA`). */
   palette: Uint8Array;
-  normalStrength: number;
-  heightDepth: MapDepth;
-  normalDepth: MapDepth;
-  /** Which maps to include; at least one must be true. */
-  include: Record<MapKind, boolean>;
-  /** Per-map member filename stem (no extension), e.g. `{height: 'HM_Rock'}`. */
-  memberNames: Record<MapKind, string>;
+  /** Which maps to include, keyed by map key; at least one must be true. */
+  include: Record<string, boolean>;
+  /** Resolved export depth per map key. */
+  depths: Record<string, MapDepth>;
+  /** Param values per map key (e.g. `{normal: {strength: 1}}`). */
+  params: Record<string, Record<string, number>>;
+  /** Per-map member filename stem (no extension), keyed by map key. */
+  memberNames: Record<string, string>;
   /** Coarse per-stage progress in `0..1` (drives the shared progress bar). */
   onProgress?: (fraction: number) => void;
 };
 
 /**
- * Derive the height + normal + color maps from the retained float buffer and pack
- * them into a single zip. Pure and synchronous — the Worker wraps this so the
- * (potentially multi-second, 8192²) work stays off the main thread. Deriving every
- * map from the float `heights` avoids the double-quantization of re-reading the
- * 8-bit canvas.
+ * Derive the selected maps from the retained float buffer and pack them into a
+ * single zip. Pure and synchronous — the Worker wraps this so the (potentially
+ * multi-second, 8192²) work stays off the main thread. Every map derives from the
+ * float `heights` (avoiding the double-quantization of re-reading the 8-bit
+ * canvas), driven entirely by the map registry.
  */
 export const buildMapsZip = ({
   heights,
   width,
   height,
   palette,
-  normalStrength,
-  heightDepth,
-  normalDepth,
   include,
+  depths,
+  params,
   memberNames,
   onProgress,
 }: BuildMapsZipParams): Uint8Array => {
-  // Only the selected maps; each entry lazily encodes its PNG when reached.
-  const encoders: Array<[MapKind, () => Uint8Array]> = [];
-  if (include.height)
-    encoders.push([
-      'height',
-      () =>
-        heightDepth === 16
-          ? encodeHeightmap16(heights, width, height)
-          : encodeHeightmap8(heights, width, height),
-    ]);
-  if (include.normal)
-    encoders.push([
-      'normal',
-      () =>
-        encode({
-          width,
-          height,
-          data:
-            normalDepth === 16
-              ? toNormalMapRGB16(heights, width, height, normalStrength)
-              : toNormalMapRGB8(heights, width, height, normalStrength),
-          depth: normalDepth,
-          channels: 3,
-        }),
-    ]);
-  if (include.color)
-    encoders.push([
-      'color',
-      () =>
-        encode({
-          width,
-          height,
-          data: toColorMapRGB8(heights, palette, width, height),
-          depth: 8,
-          channels: 3,
-        }),
-    ]);
+  const included = MAP_REGISTRY.filter((map) => include[map.key]);
 
   const files: Record<string, Uint8Array> = {};
   onProgress?.(0.02);
-  encoders.forEach(([kind, encodeMap], i) => {
-    files[`${memberNames[kind]}.png`] = encodeMap();
+  included.forEach((map, i) => {
+    const depth = depths[map.key];
+    const data = map.derive(
+      {heights, width, height, palette, params: params[map.key] ?? {}},
+      depth,
+    );
+    files[`${memberNames[map.key]}.png`] = encode({
+      width,
+      height,
+      data,
+      depth,
+      channels: map.channels,
+    });
     // Reserve the last slot for the zip step itself.
-    onProgress?.((i + 1) / (encoders.length + 1));
+    onProgress?.((i + 1) / (included.length + 1));
   });
 
   // PNGs are already deflate-compressed, so store them (level 0) rather than

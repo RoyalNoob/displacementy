@@ -463,26 +463,37 @@ prefs not persisted. Per-map analysis: height 1-channel grayscale (depth **follo
 the global `8|16` selector**, `32`→16 in the zip), normal RGB (8-bit in v1; 16-bit
 option deferred), color RGB 8-bit; unused alpha dropped on normal/color.
 
-**Future extension — more derived maps (planned, not v1).** The zip is expected to
-grow beyond height/normal/color into additional PBR-style maps derived from the same
-float height buffer. **Design for this now** so adding a map is a small, local change:
-model each map as a **`{ key, label, derive(heights,w,h,params) → typed pixels,
-channels, depth, include }`** entry in a single registry that both the export Worker
-and (later) the options-panel UI iterate over — so a new map = one registry entry +
-its `derive` fn, no plumbing changes. Likely future maps and their derivation:
+## Derived-maps registry + ambient occlusion (✅ DONE)
 
-- **Ambient occlusion (AO)** — cavity/occlusion from the height field (e.g. compare
-  each texel against a neighborhood average, or a lightweight horizon/cone
-  approximation). RGB or grayscale, 8-bit.
-- **Roughness / specular / metalness** — typically **remaps of height (or its slope)
-  through a curve/gradient LUT**, so they reuse the same LUT machinery as the color
-  map; grayscale 8-bit.
-- **Curvature / displacement variants** — also pure functions of the height field.
+> Status: **shipped — verified by tests + live click-through, incl. an 8192² AO
+> profile.** The map-registry refactor and the first new derived map (AO) are done.
 
-All are pure functions of the retained float buffer (± the gradient LUT), so they fit
-the same offloaded-Worker + progress-bar pipeline as v1's three maps; each just adds
-its own `onProgress` slice. The **strength/param** pattern used for the normal map
-generalizes to per-map params in the eventual options panel.
+**Registry refactor.** The three built-in maps were collapsed into a data-driven
+registry ([registry.ts](src/components/pages/Generator/CanvasSection/utils/maps/registry.ts),
+[types.ts](src/components/pages/Generator/CanvasSection/utils/maps/types.ts)): each is
+a **`MapDescriptor { key, label, channels, depthMode, defaultInclude, defaultSuffix,
+params[], derive(ctx,depth), previewRGBA?(ctx) }`** — pure and Worker-safe (the
+gradient palette arrives as data via `MapContext`). `buildMapsZip`, the export Worker,
+the on-canvas preview, and **all per-map UI** (include checkboxes, filename affixes,
+param sliders, per-map bit-depth, preview toggles) now iterate the registry, so
+**adding a map is one registry entry + its pure derivation — no plumbing changes.**
+Behavior-preserving: the default export stayed byte-identical.
+
+**Ambient occlusion (HBAO).** First new map
+([ao.ts](src/components/pages/Generator/CanvasSection/utils/maps/ao.ts)): Horizon-Based
+AO (the method Substance's AO node uses) — 8 directions × 8 steps, per-pixel horizon
+sweep to a tunable **radius**, scaled by **strength**; grayscale 8-bit. Off by default
+(costly), auto-appearing in the panel with a preview toggle and `_ao` suffix.
+
+**AO performance — downsample-then-upscale.** An 8192² AO bake was **~50s** (HBAO is
+64 taps/px). Since AO is low-frequency, `toAO8Auto` box-averages the heights down to a
+≤2048 compute size (radius scaled to match), runs HBAO there, then bilinearly upscales
+to full res — **8192² 4-map export dropped from ~57s → ~9s**, visually ~identical.
+
+**Still future (unbuilt).** More derived maps — **roughness / specular / metalness**
+(LUT remaps of height/slope, reusing the color-map LUT machinery), **curvature**, etc.
+Each is now just a new registry entry (pure fn + params); the pipeline, UI, filenames,
+and preview come for free.
 
 ## Testing
 

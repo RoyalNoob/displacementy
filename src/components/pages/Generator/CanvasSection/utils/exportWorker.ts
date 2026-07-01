@@ -1,15 +1,15 @@
-import {buildMapsZip, type MapDepth, type MapKind} from './maps/buildMapsZip';
+import {buildMapsZip} from './maps/buildMapsZip';
+import {type MapDepth} from './maps/types';
 
 export type ExportRequest = {
   heights: Float32Array;
   width: number;
   height: number;
   palette: Uint8Array;
-  normalStrength: number;
-  heightDepth: MapDepth;
-  normalDepth: MapDepth;
-  include: Record<MapKind, boolean>;
-  memberNames: Record<MapKind, string>;
+  include: Record<string, boolean>;
+  depths: Record<string, MapDepth>;
+  params: Record<string, Record<string, number>>;
+  memberNames: Record<string, string>;
 };
 
 export type ExportResponse =

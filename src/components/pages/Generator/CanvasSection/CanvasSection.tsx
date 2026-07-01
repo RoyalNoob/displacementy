@@ -14,9 +14,9 @@ import {SubSection} from './SubSection';
 import {loadSprites, type DrawProps} from './utils/draw';
 import {type RenderRequest, type RenderResponse} from './utils/renderWorker';
 import {type ExportRequest, type ExportResponse} from './utils/exportWorker';
-import {type MapDepth, type MapKind} from './utils/maps/buildMapsZip';
-import {toNormalMapRGBA} from './utils/maps/normalMap';
-import {toColorMapRGBA, paletteFromRowRGBA} from './utils/maps/colorMap';
+import {MAP_REGISTRY, getMap} from './utils/maps/registry';
+import {type MapDepth, type MapDescriptor} from './utils/maps/types';
+import {paletteFromRowRGBA} from './utils/maps/colorMap';
 import {drawInvert} from './utils/drawInvert';
 import {saveImage} from './utils/saveImage';
 import {encodeHeightmap16} from './utils/heightmapPng';
@@ -25,8 +25,13 @@ import {getCtx2dFromRef} from './utils/getCtx2dFromRef';
 import {getCanvasDimensions} from './utils/getCanvasDimensions';
 
 type Resolution = '1024' | '2048' | '4096' | '8192';
-type PreviewType = 'original' | 'normal' | 'color';
+/** `'original'` (the rendered height) or a map key from the registry. */
+type PreviewType = string;
 type BitDepth = '8' | '16' | '32';
+
+/** Build a per-map-key record from the registry via `fn`. */
+const mapRecord = <T,>(fn: (map: MapDescriptor) => T): Record<string, T> =>
+  Object.fromEntries(MAP_REGISTRY.map((map) => [map.key, fn(map)]));
 
 /** Strip the Windows-reserved characters that are illegal in filenames. */
 const sanitizeFileName = (name: string): string =>
@@ -56,48 +61,62 @@ export function CanvasSection() {
   const [previewType, setPreviewType] = useState<PreviewType>('original');
   const [justCopiedUrl, setJustCopiedUrl] = useState<boolean>(false);
   const [bitDepth, setBitDepth] = useState<BitDepth>('8');
-  const [normalStrength, setNormalStrength] = useState<number>(1);
 
-  // Multi-map ZIP export options.
+  // Multi-map ZIP export options — all keyed by map registry key.
   const [exportOptionsOpen, setExportOptionsOpen] = useState<boolean>(false);
   const [fileBase, setFileBase] = useState<string>(
     `DisplacementY_${width}x${height}`,
   );
-  const [includeMaps, setIncludeMaps] = useState<Record<MapKind, boolean>>({
-    height: true,
-    normal: true,
-    color: true,
-  });
+  const [includeMaps, setIncludeMaps] = useState<Record<string, boolean>>(() =>
+    mapRecord((map) => map.defaultInclude),
+  );
   // Per-map filename affixes: member = `{prefix}{base}{suffix}.png`.
   const [mapAffixes, setMapAffixes] = useState<
-    Record<MapKind, {prefix: string; suffix: string}>
-  >({
-    height: {prefix: '', suffix: '_height'},
-    normal: {prefix: '', suffix: '_normal'},
-    color: {prefix: '', suffix: '_color'},
-  });
-  const [normalDepth, setNormalDepth] = useState<MapDepth>(8);
+    Record<string, {prefix: string; suffix: string}>
+  >(() => mapRecord((map) => ({prefix: '', suffix: map.defaultSuffix})));
+  // Per-map param values (e.g. normal `strength`), seeded from registry defaults.
+  const [mapParams, setMapParams] = useState<
+    Record<string, Record<string, number>>
+  >(() =>
+    mapRecord((map) =>
+      Object.fromEntries(map.params.map((p) => [p.key, p.default])),
+    ),
+  );
+  // Per-map bit depth for maps that expose the choice (`depthMode select8or16`).
+  const [mapDepths, setMapDepths] = useState<Record<string, MapDepth>>(() =>
+    mapRecord(() => 8),
+  );
 
   // Any long-running canvas work; blocks re-entrant actions and shows the overlay.
   const isBusy = isRendering || isExporting;
 
-  const includedMapKinds = (['height', 'normal', 'color'] as const).filter(
-    (kind) => includeMaps[kind],
+  // Resolve a map's export depth from its `depthMode`.
+  const resolveDepth = (map: MapDescriptor): MapDepth =>
+    map.depthMode === 'global'
+      ? bitDepth === '8'
+        ? 8
+        : 16 // 32-bit (EXR) maps to 16 in the zip
+      : map.depthMode === 'select8or16'
+        ? mapDepths[map.key]
+        : 8;
+
+  const includedMapKeys = MAP_REGISTRY.filter((m) => includeMaps[m.key]).map(
+    (m) => m.key,
   );
   // Per-map member filename stem (no extension); falls back so it's never empty.
-  const memberName = (kind: MapKind): string => {
-    const {prefix, suffix} = mapAffixes[kind];
+  const memberName = (key: string): string => {
+    const {prefix, suffix} = mapAffixes[key];
     return (
       sanitizeFileName(`${prefix}${fileBase}${suffix}`) ||
-      `DisplacementY_${kind}`
+      `DisplacementY_${key}`
     );
   };
   const zipName = sanitizeFileName(fileBase) || 'DisplacementY';
-  const includedMemberNames = includedMapKinds.map(memberName);
+  const includedMemberNames = includedMapKeys.map(memberName);
   // Two included maps must not resolve to the same filename (zip key collision).
   const hasNameCollision =
     new Set(includedMemberNames).size !== includedMemberNames.length;
-  const canExport = includedMapKinds.length > 0 && !hasNameCollision;
+  const canExport = includedMapKeys.length > 0 && !hasNameCollision;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasOriginalPreviewDataUrl = useRef<string | undefined>(undefined);
@@ -294,9 +313,6 @@ export function CanvasSection() {
       gradientCtx.getImageData(0, 0, gradientWidth, 1).data,
     );
 
-    // Zip height depth follows the global selector; 32-bit (EXR) maps to 16 here.
-    const heightDepth: MapDepth = bitDepth === '8' ? 8 : 16;
-
     setIsExporting(true);
     setProgress(0);
 
@@ -336,15 +352,10 @@ export function CanvasSection() {
       width: w,
       height: h,
       palette,
-      normalStrength,
-      heightDepth,
-      normalDepth,
       include: includeMaps,
-      memberNames: {
-        height: memberName('height'),
-        normal: memberName('normal'),
-        color: memberName('color'),
-      },
+      depths: mapRecord(resolveDepth),
+      params: mapParams,
+      memberNames: mapRecord((map) => memberName(map.key)),
     };
     worker.postMessage(request, [heightsCopy.buffer, palette.buffer]);
   };
@@ -379,7 +390,7 @@ export function CanvasSection() {
     });
   };
 
-  const togglePreviewFor = (type: PreviewType) => () => {
+  const togglePreviewFor = (key: string) => () => {
     quickRender(() => {
       const shouldDrawNonOriginal = previewType === 'original';
 
@@ -389,23 +400,25 @@ export function CanvasSection() {
         // Save the current view (may be inverted) to restore on toggle-off.
         canvasOriginalPreviewDataUrl.current = ctx2d.canvas.toDataURL();
 
-        // Derive the preview from the retained float buffer (same source and math
-        // as the map export), not the 8-bit canvas.
+        // Derive the preview from the retained float buffer via the map's own
+        // pure function (same source and math as export), not the 8-bit canvas.
         const heightmap = lastHeightsRef.current;
-        if (heightmap) {
+        const descriptor = getMap(key);
+        if (heightmap && descriptor.previewRGBA) {
           const {data, width: w, height: h} = heightmap;
-          if (type === 'normal') {
-            const rgba = toNormalMapRGBA(data, w, h, normalStrength);
-            ctx2d.putImageData(new ImageData(rgba, w, h), 0, 0);
-          } else if (type === 'color') {
-            const gradientCtx = getCtx2dFromRef(gradientCanvasRef);
-            const {w: gradientWidth} = getCanvasDimensions(gradientCtx);
-            const palette = paletteFromRowRGBA(
-              gradientCtx.getImageData(0, 0, gradientWidth, 1).data,
-            );
-            const rgba = toColorMapRGBA(data, palette, w, h);
-            ctx2d.putImageData(new ImageData(rgba, w, h), 0, 0);
-          }
+          const gradientCtx = getCtx2dFromRef(gradientCanvasRef);
+          const {w: gradientWidth} = getCanvasDimensions(gradientCtx);
+          const palette = paletteFromRowRGBA(
+            gradientCtx.getImageData(0, 0, gradientWidth, 1).data,
+          );
+          const rgba = descriptor.previewRGBA({
+            heights: data,
+            width: w,
+            height: h,
+            palette,
+            params: mapParams[key],
+          });
+          ctx2d.putImageData(new ImageData(rgba, w, h), 0, 0);
         }
       } else {
         // Restore original preview
@@ -422,15 +435,14 @@ export function CanvasSection() {
         }
       }
 
-      setPreviewType(shouldDrawNonOriginal ? type : 'original');
+      setPreviewType(shouldDrawNonOriginal ? key : 'original');
     });
   };
 
   const invertDisabled = isPristine || previewType !== 'original';
-  const normalDisabled =
-    isPristine || (previewType !== 'normal' && previewType !== 'original');
-  const colorDisabled =
-    isPristine || (previewType !== 'color' && previewType !== 'original');
+  // A map's preview toggle is available only from 'original' or its own preview.
+  const previewDisabledFor = (key: string): boolean =>
+    isPristine || (previewType !== key && previewType !== 'original');
 
   return (
     <section>
@@ -462,7 +474,7 @@ export function CanvasSection() {
           title={
             isPristine
               ? 'Render first to enable export'
-              : includedMapKinds.length === 0
+              : includedMapKeys.length === 0
                 ? 'Select at least one map in Export options'
                 : hasNameCollision
                   ? 'Two maps share a filename — make them unique in Export options'
@@ -497,58 +509,93 @@ export function CanvasSection() {
               setValue={setFileBase}
             />
           </div>
-          <div className='flex flex-col gap-2'>
+          <div className='flex flex-col gap-3'>
             <span className='text-sm text-white'>
               Maps — filename is{' '}
               <span className='font-mono'>{'{prefix}{base}{suffix}.png'}</span>
             </span>
-            {(['height', 'normal', 'color'] as const).map((kind) => {
-              const {prefix, suffix} = mapAffixes[kind];
+            {MAP_REGISTRY.map((map) => {
+              const {prefix, suffix} = mapAffixes[map.key];
               const setAffix = (patch: {prefix?: string; suffix?: string}) => {
                 setMapAffixes((prev) => ({
                   ...prev,
-                  [kind]: {...prev[kind], ...patch},
+                  [map.key]: {...prev[map.key], ...patch},
                 }));
               };
+              const included = includeMaps[map.key];
               return (
                 <div
-                  key={kind}
+                  key={map.key}
                   className='flex flex-col gap-1 border-l border-white/20 pl-2'
                 >
                   <Checkbox
-                    label={kind[0].toUpperCase() + kind.slice(1)}
-                    isChecked={includeMaps[kind]}
+                    label={map.label}
+                    isChecked={included}
                     setIsChecked={(checked) => {
-                      setIncludeMaps((prev) => ({...prev, [kind]: checked}));
+                      setIncludeMaps((prev) => ({...prev, [map.key]: checked}));
                     }}
                   />
                   <div
                     className={clsx(
-                      'flex items-end gap-2',
-                      !includeMaps[kind] && 'opacity-50',
+                      'flex flex-col gap-1',
+                      !included && 'opacity-50',
                     )}
                   >
-                    <Input
-                      label={`${kind} prefix`}
-                      hideLabel
-                      placeholder='prefix'
-                      value={prefix}
-                      setValue={(value) => {
-                        setAffix({prefix: value});
-                      }}
-                    />
-                    <Input
-                      label={`${kind} suffix`}
-                      hideLabel
-                      placeholder='suffix'
-                      value={suffix}
-                      setValue={(value) => {
-                        setAffix({suffix: value});
-                      }}
-                    />
-                    <span className='shrink-0 pb-1 font-mono text-xs text-white/70'>
-                      {`→ ${memberName(kind)}.png`}
-                    </span>
+                    <div className='flex items-end gap-2'>
+                      <Input
+                        label={`${map.key} prefix`}
+                        hideLabel
+                        placeholder='prefix'
+                        value={prefix}
+                        setValue={(value) => {
+                          setAffix({prefix: value});
+                        }}
+                      />
+                      <Input
+                        label={`${map.key} suffix`}
+                        hideLabel
+                        placeholder='suffix'
+                        value={suffix}
+                        setValue={(value) => {
+                          setAffix({suffix: value});
+                        }}
+                      />
+                      <span className='shrink-0 pb-1 font-mono text-xs text-white/70'>
+                        {`→ ${memberName(map.key)}.png`}
+                      </span>
+                    </div>
+                    {map.params.map((param) => (
+                      <Slider
+                        key={param.key}
+                        label={param.label}
+                        min={param.min}
+                        max={param.max}
+                        step={param.step}
+                        value={mapParams[map.key][param.key]}
+                        setValue={(value) => {
+                          setMapParams((prev) => ({
+                            ...prev,
+                            [map.key]: {...prev[map.key], [param.key]: value},
+                          }));
+                        }}
+                      />
+                    ))}
+                    {map.depthMode === 'select8or16' && (
+                      <RadioGroup<'8' | '16'>
+                        aria-label={`${map.label} bit depth`}
+                        items={[
+                          {value: '8', label: '8-bit'},
+                          {value: '16', label: '16-bit'},
+                        ]}
+                        value={mapDepths[map.key] === 16 ? '16' : '8'}
+                        setValue={(value) => {
+                          setMapDepths((prev) => ({
+                            ...prev,
+                            [map.key]: value === '16' ? 16 : 8,
+                          }));
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -557,7 +604,7 @@ export function CanvasSection() {
           <div className='text-xs'>
             <span className='text-white/50'>Zip: </span>
             <span className='font-mono text-white/70'>{`${zipName}.zip`}</span>
-            {includedMapKinds.length === 0 && (
+            {includedMapKeys.length === 0 && (
               <span className='pl-2 text-pink'>Select at least one map.</span>
             )}
             {hasNameCollision && (
@@ -567,24 +614,10 @@ export function CanvasSection() {
               </span>
             )}
           </div>
-          <div className='flex flex-col gap-1'>
-            <span className='text-sm text-white'>Normal map bit depth</span>
-            <RadioGroup<'8' | '16'>
-              aria-label='Normal map bit depth'
-              items={[
-                {value: '8', label: '8-bit'},
-                {value: '16', label: '16-bit'},
-              ]}
-              value={normalDepth === 16 ? '16' : '8'}
-              setValue={(value) => {
-                setNormalDepth(value === '16' ? 16 : 8);
-              }}
-            />
-            <span className='text-xs text-white/70 italic'>
-              Height depth follows the global Bit depth selector. Color is
-              always 8-bit RGB.
-            </span>
-          </div>
+          <span className='text-xs text-white/70 italic'>
+            Height depth follows the global Bit depth selector. Color is always
+            8-bit RGB.
+          </span>
         </div>
       )}
       <SubSection title='Resolution'>
@@ -642,57 +675,29 @@ export function CanvasSection() {
           Invert
         </Button>
       </SubSection>
-      <SubSection
-        title='Normal'
-        disabled={normalDisabled}
-        hint={
-          isPristine
-            ? 'Render first to enable.'
-            : 'Showing another preview — return to the original first.'
-        }
-      >
-        <Button
-          disabled={isBusy || normalDisabled}
-          onClick={togglePreviewFor('normal')}
+      {MAP_REGISTRY.filter((map) => map.previewRGBA).map((map) => (
+        <SubSection
+          key={map.key}
+          title={map.label}
+          disabled={previewDisabledFor(map.key)}
+          hint={
+            isPristine
+              ? 'Render first to enable.'
+              : 'Showing another preview — return to the original first.'
+          }
         >
-          Preview {previewType === 'normal' ? 'original' : 'normal'}
-        </Button>
-      </SubSection>
-      <SubSection
-        title='Normal map strength'
-        disabled={isPristine}
-        hint='Render first to enable.'
-      >
-        <Slider
-          label='Strength'
-          min={0.1}
-          max={5}
-          step={0.1}
-          value={normalStrength}
-          setValue={setNormalStrength}
-        />
-        <span className='text-xs text-white/70 italic'>
-          Controls relief depth of the exported normal map (and the normal
-          preview on next toggle).
-        </span>
-      </SubSection>
-      <SubSection
-        title='Color'
-        disabled={colorDisabled}
-        hint={
-          isPristine
-            ? 'Render first to enable.'
-            : 'Showing another preview — return to the original first.'
-        }
-      >
-        <Button
-          disabled={isBusy || colorDisabled}
-          onClick={togglePreviewFor('color')}
-        >
-          Preview {previewType === 'color' ? 'original' : 'color'}
-        </Button>
-        <Gradient ref={gradientCanvasRef} />
-      </SubSection>
+          <Button
+            disabled={isBusy || previewDisabledFor(map.key)}
+            onClick={togglePreviewFor(map.key)}
+          >
+            Preview{' '}
+            {previewType === map.key ? 'original' : map.label.toLowerCase()}
+          </Button>
+          {/* The gradient editor feeds the color map's palette; keep it mounted
+              (export reads it) by rendering it in the color map's section. */}
+          {map.key === 'color' && <Gradient ref={gradientCanvasRef} />}
+        </SubSection>
+      ))}
     </section>
   );
 }
