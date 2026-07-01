@@ -1,4 +1,4 @@
-import {buildMapsZip, type HeightDepth} from './maps/buildMapsZip';
+import {buildMapsZip, type MapDepth, type MapKind} from './maps/buildMapsZip';
 
 export type ExportRequest = {
   heights: Float32Array;
@@ -6,8 +6,10 @@ export type ExportRequest = {
   height: number;
   palette: Uint8Array;
   normalStrength: number;
-  heightDepth: HeightDepth;
-  fileBase: string;
+  heightDepth: MapDepth;
+  normalDepth: MapDepth;
+  include: Record<MapKind, boolean>;
+  memberNames: Record<MapKind, string>;
 };
 
 export type ExportResponse =

@@ -298,8 +298,26 @@ Later — performance stage (only after Phases 0–C are correct and verified):
 
 ## Planned feature — Multi-map ZIP export (height + normal + color)
 
-> Status: **v1 (core-first) DONE — verified by tests, build, and live in-browser
-> click-through.** The full options-panel UI remains a follow-up.
+> Status: **v1 + v2 DONE — verified by tests, build, and live in-browser
+> click-through.** Feature complete for the planned scope.
+>
+> **v2 shipped (full options UI).** Added a new `Input` text primitive
+> ([Input.tsx](src/components/ui/Input/Input.tsx)) and a collapsible **"Export
+> options"** panel in
+> ([CanvasSection.tsx](src/components/pages/Generator/CanvasSection/CanvasSection.tsx)):
+> a **shared Base** field (defaults to `DisplacementY_{W}x{H}`, tracks resolution;
+> **no auto timestamp**) plus a **per-map prefix & suffix** — each member filename is
+> `{prefix}{base}{suffix}.png`, so e.g. normal→`_N`, color→`_C`, height→`HM_` prefix.
+> Zip name is `{base}.zip`. **Live per-map filename preview**; **per-map include
+> checkboxes** (Export disabled + hint when none selected); a **filename-collision
+> guard** (two included maps resolving to the same name disables export with a
+> warning); and a **per-map normal bit-depth** radio (8/16-bit RGB). Height depth
+> follows the global selector; color stays 8-bit. Names are sanitized
+> (Windows-reserved chars stripped; empty stem falls back). `buildMapsZip` takes
+> `include` + `normalDepth` + per-map `memberNames`; `toNormalMapRGB16` added.
+> Verified live: `HM_…`/`…_N`/`…_C` naming, color-deselect omits color, normal 16-bit
+> RGB (colorType 2, depth 16), empty-selection + collision guards. 68 unit tests
+> green.
 >
 > **Live verification (in-browser).** Render → "Export maps (.zip)" produced a valid
 > `PK` zip (`application/zip`, ~825 KB) named `DisplacementY_2048x2048_<ts>.zip`; the
@@ -333,9 +351,9 @@ Later — performance stage (only after Phases 0–C are correct and verified):
 > `tsc` clean, and a clean production build emitting the `exportWorker` chunk with
 > `fflate`/`fast-png` bundled.
 >
-> **Deferred to v2 (full UI):** collapsible "Export options" panel, new `Input` text
-> primitive, prefix/base/postfix filename fields + live preview, per-map include
-> checkboxes, per-map bit-depth (incl. 16-bit normal). See steps 5–6 and the future
+> **v2 delivered (was "deferred to v2"):** collapsible "Export options" panel, new
+> `Input` text primitive, prefix/base/postfix filename fields + live preview, per-map
+> include checkboxes, per-map bit-depth (16-bit normal). See steps 5–6 and the future
 > derived-maps note.
 >
 > **Scope decision — core-first (v1).** Ship a single **"Export maps (.zip)"**
@@ -383,9 +401,8 @@ on-screen preview.
      via a single Slider (the existing `Slider` primitive) — larger = deeper relief.
      `toNormalMap` takes it as a parameter so preview and export stay identical.
 3. **Per-map depth & channels (important — they are NOT all the same).** Bit
-   depth/channels follow each map's _purpose_, not a single global setting. (v1
-   status: height 8/16 grayscale ✅, normal 8-bit RGB ✅, color 8-bit RGB ✅;
-   **16-bit normal RGB deferred to v2**.)
+   depth/channels follow each map's _purpose_, not a single global setting. (✅ done:
+   height 8/16 grayscale, normal 8/16-bit RGB, color 8-bit RGB.)
    - **Height** = precision-critical data → **1-channel grayscale**. Depth
      **follows the existing global bit-depth selector** (`8 | 16`), for consistency
      with the single-file Download button; the selector's **`32` (EXR) maps to 16**
@@ -405,17 +422,19 @@ on-screen preview.
 4. **Encode + zip** (✅ v1) — each map → bytes (all three via `fast-png`: grayscale
    1-channel for height, RGB 3-channel for normal/color) → zip with **`fflate`**
    (`zipSync`, **level 0** since PNGs are already deflate-compressed) → download.
-5. **Filename scheme** — `{prefix}{base}{postfix}_{map}.png` (`map` ∈
-   height/normal/color); zip = `{prefix}{base}{postfix}.zip`. `base` defaults to the
-   current `DisplacementY_{W}x{H}_{datetime}`. Sanitize illegal chars. (v1: **`base`
-   only** — `{base}_{map}.png` members, `{base}.zip`; prefix/postfix + custom base
-   deferred to v2.)
-6. **UI (v1 — core-first).** A new **"Export maps (.zip)"** button in the output row
-   (next to Download), disabled when pristine/rendering, plus a **normal-map strength
-   Slider**. The full collapsible "Export options" panel (prefix / base / postfix
-   inputs, live filename preview, per-map include checkboxes, per-map bit-depth) and
-   the new `Input` text primitive it needs are **deferred to a follow-up** — see the
-   scope decision above.
+5. **Filename scheme** (✅ v2) — a **shared Base** plus **per-map prefix & suffix**:
+   member = `{map.prefix}{base}{map.suffix}.png`; zip = `{base}.zip`. This lets each
+   map carry a naming convention (normal `_N`, color `_C`, height `HM_` prefix, etc.).
+   `base` defaults to `DisplacementY_{W}x{H}` and tracks resolution; **no auto
+   timestamp** (chosen model — user controls the whole name). Illegal
+   (Windows-reserved) chars stripped; empty stem falls back. A **collision guard**
+   blocks export if two included maps resolve to the same filename.
+6. **UI** (✅ v1 + v2). v1: **"Export maps (.zip)"** button in the output row
+   (disabled when pristine/rendering) + a **normal-map strength Slider**. v2: a
+   collapsible **"Export options"** panel with the new `Input` text primitive
+   (prefix / base / postfix), a **live filename preview**, **per-map include
+   checkboxes** (Export disabled + hint when none selected), and a **per-map normal
+   bit-depth** radio (8/16-bit).
 7. **Async + progress (offloaded; ✅ v1).** The map derivation + PNG encoding + zip
    run **off the main thread in a Worker** (always, not just at 8192²), so a
    268 MB × 3-map encode never stalls the UI. **Reuses the existing "Rendering"

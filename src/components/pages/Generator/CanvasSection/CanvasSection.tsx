@@ -1,7 +1,10 @@
 'use client';
+import clsx from 'clsx';
 import {useRef, useState} from 'react';
 import {useStore} from '../store';
 import {Button} from '@/components/ui/Button';
+import {Checkbox} from '@/components/ui/Checkbox';
+import {Input} from '@/components/ui/Input';
 import {RadioGroup} from '@/components/ui/RadioGroup';
 import {Slider} from '@/components/ui/Slider';
 import {SectionTitle} from '../SectionTitle';
@@ -11,7 +14,7 @@ import {SubSection} from './SubSection';
 import {loadSprites, type DrawProps} from './utils/draw';
 import {type RenderRequest, type RenderResponse} from './utils/renderWorker';
 import {type ExportRequest, type ExportResponse} from './utils/exportWorker';
-import {type HeightDepth} from './utils/maps/buildMapsZip';
+import {type MapDepth, type MapKind} from './utils/maps/buildMapsZip';
 import {toNormalMapRGBA} from './utils/maps/normalMap';
 import {toColorMapRGBA, paletteFromRowRGBA} from './utils/maps/colorMap';
 import {drawInvert} from './utils/drawInvert';
@@ -24,6 +27,10 @@ import {getCanvasDimensions} from './utils/getCanvasDimensions';
 type Resolution = '1024' | '2048' | '4096' | '8192';
 type PreviewType = 'original' | 'normal' | 'color';
 type BitDepth = '8' | '16' | '32';
+
+/** Strip the Windows-reserved characters that are illegal in filenames. */
+const sanitizeFileName = (name: string): string =>
+  name.replace(/[<>:"/\\|?*]/g, '').trim();
 
 /** Timestamp for export filenames, e.g. `2026-07-01-143005`. */
 const dateTimeStamp = (): string => {
@@ -51,8 +58,46 @@ export function CanvasSection() {
   const [bitDepth, setBitDepth] = useState<BitDepth>('8');
   const [normalStrength, setNormalStrength] = useState<number>(1);
 
+  // Multi-map ZIP export options.
+  const [exportOptionsOpen, setExportOptionsOpen] = useState<boolean>(false);
+  const [fileBase, setFileBase] = useState<string>(
+    `DisplacementY_${width}x${height}`,
+  );
+  const [includeMaps, setIncludeMaps] = useState<Record<MapKind, boolean>>({
+    height: true,
+    normal: true,
+    color: true,
+  });
+  // Per-map filename affixes: member = `{prefix}{base}{suffix}.png`.
+  const [mapAffixes, setMapAffixes] = useState<
+    Record<MapKind, {prefix: string; suffix: string}>
+  >({
+    height: {prefix: '', suffix: '_height'},
+    normal: {prefix: '', suffix: '_normal'},
+    color: {prefix: '', suffix: '_color'},
+  });
+  const [normalDepth, setNormalDepth] = useState<MapDepth>(8);
+
   // Any long-running canvas work; blocks re-entrant actions and shows the overlay.
   const isBusy = isRendering || isExporting;
+
+  const includedMapKinds = (['height', 'normal', 'color'] as const).filter(
+    (kind) => includeMaps[kind],
+  );
+  // Per-map member filename stem (no extension); falls back so it's never empty.
+  const memberName = (kind: MapKind): string => {
+    const {prefix, suffix} = mapAffixes[kind];
+    return (
+      sanitizeFileName(`${prefix}${fileBase}${suffix}`) ||
+      `DisplacementY_${kind}`
+    );
+  };
+  const zipName = sanitizeFileName(fileBase) || 'DisplacementY';
+  const includedMemberNames = includedMapKinds.map(memberName);
+  // Two included maps must not resolve to the same filename (zip key collision).
+  const hasNameCollision =
+    new Set(includedMemberNames).size !== includedMemberNames.length;
+  const canExport = includedMapKinds.length > 0 && !hasNameCollision;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasOriginalPreviewDataUrl = useRef<string | undefined>(undefined);
@@ -250,8 +295,7 @@ export function CanvasSection() {
     );
 
     // Zip height depth follows the global selector; 32-bit (EXR) maps to 16 here.
-    const heightDepth: HeightDepth = bitDepth === '8' ? 8 : 16;
-    const fileBase = `DisplacementY_${w}x${h}_${dateTimeStamp()}`;
+    const heightDepth: MapDepth = bitDepth === '8' ? 8 : 16;
 
     setIsExporting(true);
     setProgress(0);
@@ -272,7 +316,7 @@ export function CanvasSection() {
       );
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${fileBase}.zip`;
+      a.download = `${zipName}.zip`;
       a.click();
       URL.revokeObjectURL(url);
       worker.terminate();
@@ -294,7 +338,13 @@ export function CanvasSection() {
       palette,
       normalStrength,
       heightDepth,
-      fileBase,
+      normalDepth,
+      include: includeMaps,
+      memberNames: {
+        height: memberName('height'),
+        normal: memberName('normal'),
+        color: memberName('color'),
+      },
     };
     worker.postMessage(request, [heightsCopy.buffer, palette.buffer]);
   };
@@ -408,15 +458,27 @@ export function CanvasSection() {
           Download
         </Button>
         <Button
-          disabled={isPristine || isBusy}
+          disabled={isPristine || isBusy || !canExport}
           title={
             isPristine
               ? 'Render first to enable export'
-              : 'Export height, normal and color maps as a .zip'
+              : includedMapKinds.length === 0
+                ? 'Select at least one map in Export options'
+                : hasNameCollision
+                  ? 'Two maps share a filename — make them unique in Export options'
+                  : 'Export the selected maps as a .zip'
           }
           onClick={exportMaps}
         >
           Export maps (.zip)
+        </Button>
+        <Button
+          aria-expanded={exportOptionsOpen}
+          onClick={() => {
+            setExportOptionsOpen((open) => !open);
+          }}
+        >
+          {`Export options ${exportOptionsOpen ? '▾' : '▸'}`}
         </Button>
         <Button onClick={copyUrl}>
           {justCopiedUrl ? 'Copied!' : 'Copy URL'}
@@ -425,6 +487,106 @@ export function CanvasSection() {
       <span className='sr-only' role='status' aria-live='polite'>
         {justCopiedUrl ? 'Shareable URL copied to clipboard' : ''}
       </span>
+      {exportOptionsOpen && (
+        <div className='mt-2 flex flex-col gap-3 border border-dashed border-white/40 p-3'>
+          <p className='text-sm text-white'>Export options (.zip)</p>
+          <div className='sm:w-1/2'>
+            <Input
+              label='Base name (shared)'
+              value={fileBase}
+              setValue={setFileBase}
+            />
+          </div>
+          <div className='flex flex-col gap-2'>
+            <span className='text-sm text-white'>
+              Maps — filename is{' '}
+              <span className='font-mono'>{'{prefix}{base}{suffix}.png'}</span>
+            </span>
+            {(['height', 'normal', 'color'] as const).map((kind) => {
+              const {prefix, suffix} = mapAffixes[kind];
+              const setAffix = (patch: {prefix?: string; suffix?: string}) => {
+                setMapAffixes((prev) => ({
+                  ...prev,
+                  [kind]: {...prev[kind], ...patch},
+                }));
+              };
+              return (
+                <div
+                  key={kind}
+                  className='flex flex-col gap-1 border-l border-white/20 pl-2'
+                >
+                  <Checkbox
+                    label={kind[0].toUpperCase() + kind.slice(1)}
+                    isChecked={includeMaps[kind]}
+                    setIsChecked={(checked) => {
+                      setIncludeMaps((prev) => ({...prev, [kind]: checked}));
+                    }}
+                  />
+                  <div
+                    className={clsx(
+                      'flex items-end gap-2',
+                      !includeMaps[kind] && 'opacity-50',
+                    )}
+                  >
+                    <Input
+                      label={`${kind} prefix`}
+                      hideLabel
+                      placeholder='prefix'
+                      value={prefix}
+                      setValue={(value) => {
+                        setAffix({prefix: value});
+                      }}
+                    />
+                    <Input
+                      label={`${kind} suffix`}
+                      hideLabel
+                      placeholder='suffix'
+                      value={suffix}
+                      setValue={(value) => {
+                        setAffix({suffix: value});
+                      }}
+                    />
+                    <span className='shrink-0 pb-1 font-mono text-xs text-white/70'>
+                      {`→ ${memberName(kind)}.png`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className='text-xs'>
+            <span className='text-white/50'>Zip: </span>
+            <span className='font-mono text-white/70'>{`${zipName}.zip`}</span>
+            {includedMapKinds.length === 0 && (
+              <span className='pl-2 text-pink'>Select at least one map.</span>
+            )}
+            {hasNameCollision && (
+              <span className='pl-2 text-pink'>
+                Two included maps share a filename — make prefixes/suffixes
+                unique.
+              </span>
+            )}
+          </div>
+          <div className='flex flex-col gap-1'>
+            <span className='text-sm text-white'>Normal map bit depth</span>
+            <RadioGroup<'8' | '16'>
+              aria-label='Normal map bit depth'
+              items={[
+                {value: '8', label: '8-bit'},
+                {value: '16', label: '16-bit'},
+              ]}
+              value={normalDepth === 16 ? '16' : '8'}
+              setValue={(value) => {
+                setNormalDepth(value === '16' ? 16 : 8);
+              }}
+            />
+            <span className='text-xs text-white/70 italic'>
+              Height depth follows the global Bit depth selector. Color is
+              always 8-bit RGB.
+            </span>
+          </div>
+        </div>
+      )}
       <SubSection title='Resolution'>
         <RadioGroup<Resolution>
           aria-label='Resolution'
@@ -442,6 +604,8 @@ export function CanvasSection() {
             setIsPristine(true);
             setPreviewType('original');
             lastHeightsRef.current = undefined;
+            // Keep the default filename base in sync with the new resolution.
+            setFileBase(`DisplacementY_${value}x${value}`);
           }}
         />
         <span className='text-xs text-pink italic'>

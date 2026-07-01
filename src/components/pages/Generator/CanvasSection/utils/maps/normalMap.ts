@@ -23,17 +23,17 @@ const sampleClamped = (
 };
 
 /**
- * Compute the RGB normal map (3 channels, 8-bit) for the given float heights.
- * Returns a `Uint8Array` of length `width * height * 3`.
+ * Core Sobel normal computation, quantized to `max` (255 for 8-bit, 65535 for
+ * 16-bit). Fills the given typed array with 3 channels per pixel.
  */
-export const toNormalMapRGB8 = (
+const buildNormal = <T extends Uint8Array | Uint16Array>(
+  out: T,
   heights: Float32Array,
   width: number,
   height: number,
   strength: number,
-): Uint8Array => {
-  const out = new Uint8Array(width * height * 3);
-
+  max: number,
+): T => {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const tl = sampleClamped(heights, width, height, x - 1, y - 1);
@@ -56,15 +56,53 @@ export const toNormalMapRGB8 = (
       const invLen = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
 
       const i = (y * width + x) * 3;
-      // Map [-1,1] → [0,255].
-      out[i] = Math.round((nx * invLen * 0.5 + 0.5) * 255);
-      out[i + 1] = Math.round((ny * invLen * 0.5 + 0.5) * 255);
-      out[i + 2] = Math.round((nz * invLen * 0.5 + 0.5) * 255);
+      // Map [-1,1] → [0,max].
+      out[i] = Math.round((nx * invLen * 0.5 + 0.5) * max);
+      out[i + 1] = Math.round((ny * invLen * 0.5 + 0.5) * max);
+      out[i + 2] = Math.round((nz * invLen * 0.5 + 0.5) * max);
     }
   }
 
   return out;
 };
+
+/**
+ * Compute the RGB normal map (3 channels, 8-bit) for the given float heights.
+ * Returns a `Uint8Array` of length `width * height * 3`.
+ */
+export const toNormalMapRGB8 = (
+  heights: Float32Array,
+  width: number,
+  height: number,
+  strength: number,
+): Uint8Array =>
+  buildNormal(
+    new Uint8Array(width * height * 3),
+    heights,
+    width,
+    height,
+    strength,
+    255,
+  );
+
+/**
+ * Compute the RGB normal map (3 channels, 16-bit) — smoother lighting on gentle
+ * surfaces than 8-bit, at 2× the bytes. Returns a `Uint16Array`.
+ */
+export const toNormalMapRGB16 = (
+  heights: Float32Array,
+  width: number,
+  height: number,
+  strength: number,
+): Uint16Array =>
+  buildNormal(
+    new Uint16Array(width * height * 3),
+    heights,
+    width,
+    height,
+    strength,
+    65535,
+  );
 
 /**
  * Preview adapter: the RGB normal map expanded to opaque RGBA, ready for

@@ -53,7 +53,8 @@
       "Bash(npm install *)",
       "Bash(node -e \"console.log\\('fflate', require\\('./package.json'\\).dependencies.fflate\\)\")",
       "Bash(rm src/components/pages/Generator/CanvasSection/utils/drawNormal.ts src/components/pages/Generator/CanvasSection/utils/drawColor.ts)",
-      "Bash(npx astro *)"
+      "Bash(npx astro *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
