@@ -1,9 +1,9 @@
 # Spec — Rendering core, export & derived maps
 
 > Status: everything under **Shipped** is done, tested, and verified in-browser
-> (91 unit tests green at last count). Active work: **UI declutter — app-shell
-> layout + export dialog** (final section). (The prior parameter-locks spec was
-> fully implemented and removed; the code is its record.)
+> (91 unit tests green at last count). No active work in flight. (The prior
+> parameter-locks spec was fully implemented and removed; the code is its
+> record.)
 
 ## Shipped — CPU float-precision rendering core (Phases 0–D)
 
@@ -80,10 +80,11 @@ zip, without disturbing the on-screen preview.
   resolution; **no auto timestamp** (user owns the name). Windows-reserved chars
   stripped; empty stems fall back; a **collision guard** disables export when two
   included maps resolve to the same name.
-- **Options panel** (collapsible; uses the new
-  [Input](src/components/ui/Input/Input.tsx) text primitive): per-map include
-  checkboxes, per-map prefix/suffix with live filename preview, per-map param
-  sliders, per-map bit-depth where applicable.
+- **Export configuration UI** (originally a collapsible panel; now the
+  **export dialog** — see the UI-declutter section): per-map include
+  checkboxes, per-map prefix/suffix with live filename preview
+  (via the [Input](src/components/ui/Input/Input.tsx) text primitive), per-map
+  bit-depth where applicable. Per-map param sliders live on the map cards.
 - **Per-map depth/channels:** height = 1-ch grayscale, depth follows the global
   selector (`32`→16 in the zip); normal = RGB with its own 8/16 radio; color =
   RGB 8-bit (LUT is inherently ≤256 bands). Unused alpha dropped everywhere.
@@ -175,108 +176,54 @@ positions**, built as reusable LUT machinery.
 - Parallelizing the generation loop (breaks PRNG order).
 - Group-level locks, lock-all, reroll-as-preset (from the prior locks spec).
 
----
+## Shipped — UI declutter: app-shell layout + export dialog
 
-## Active — UI declutter: app-shell layout + export dialog (planned)
+The page moved from one long scrolling document to a **fixed-viewport app
+shell** (at `lg:`; below that the old stacked scrolling layout remains):
 
-The current page is one long scrolling document; `CanvasSection` has accreted
-canvas + actions + export panel + per-map controls into a single cluttered
-column. Restructure into a **fixed viewport app shell** and move export
-configuration into a **dialog**. All work conforms to the existing style
-language (black bg, white text, dashed white borders, `pink` accent, `sky`
-focus rings, square corners, small type).
+- **Shell** ([Generator.tsx](src/components/pages/Generator/Generator.tsx)):
+  `h-dvh` full-width, slim one-line header with the **footer links folded in**.
+  Left column = canvas region over a fixed action row over the scrollable
+  **output region** (`flex-[0_0_40%] overflow-y-auto`); right column = the
+  scrollable **settings region**. Thin theme scrollbars via `global.css`
+  (`scrollbar-width/color`).
+- **Canvas scaling**: the canvas pane is a size container
+  (`[container-type:size]`); the square wrapper is
+  `w-[min(100cqw,100cqh)]` — always the largest square that fits, no
+  scrollbars. Verified square at 1440×900 with zero page scroll; mobile
+  fallback keeps the old stacked flow.
+- **Export dialog**: new [ui/Dialog](src/components/ui/Dialog/Dialog.tsx) on
+  `@radix-ui/react-dialog` (focus trap/Esc/aria; styled to theme). Holds export
+  configuration only — Base + per-map prefix/suffix + live filename preview,
+  include checkboxes, per-map bit depth, collision warning, and an in-dialog
+  Export button (closes then exports). The action row keeps one-click
+  "Export maps (.zip)".
+- **Map cards** (output region): one registry-driven card per map — label,
+  include-in-export checkbox, preview toggle, param sliders, LUT editor.
+  Creative params moved out of the export panel (they drive previews).
+- **Declutter**: disabled settings groups **auto-collapse** to their header row
+  ([Group.tsx](src/components/pages/Generator/SettingsSection/Group/Group.tsx));
+  persistent "Render first…" hint text replaced with hover `title` tooltips
+  ([SubSection.tsx](src/components/pages/Generator/CanvasSection/SubSection/SubSection.tsx));
+  a corner **toast** ([ui/Toast](src/components/ui/Toast/Toast.tsx), zustand +
+  `role='status'`) replaces the Copy-URL label swap and announces export
+  completion.
+- **Canvas zoom/pan** ([Canvas.tsx](src/components/pages/Generator/CanvasSection/Canvas/Canvas.tsx)):
+  native (non-passive) wheel zoom around the cursor (1–8×, pixelated when
+  zoomed), drag pan (clamped so content covers the viewport), double-click
+  reset, zoom badge; pure CSS transform — rendering/exports untouched; resets
+  on resolution change.
+- **Click-to-type slider values** ([Slider.tsx](src/components/ui/Slider/Slider.tsx)):
+  the readout is click/Enter-editable; commits on Enter/blur clamped to
+  min/max and snapped to the step grid, Esc cancels; dual sliders clamp
+  against each other.
+- **Keyboard shortcuts** (window listener via a fresh-closure ref, guarded
+  while typing in fields): `R` render, `E` export dialog, `1..9` preview
+  toggles, `?` cheatsheet dialog, Esc closes.
 
-### Target layout (`lg:` and up)
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ Displacement Y · v0.1.x         @credit · GitHub · Vers. │  slim header
-├──────────────────────────────┬───────────────────────────┤
-│                              │ SETTINGS                  │
-│         canvas               │ Basics / Rect / Grid /    │
-│    (square, scales to fit,   │ Cols / Rows / Lines /     │
-│     centered, no scroll)     │ Sprites / Other           │
-│                              │                           │
-├──────────────────────────────┤        (scrolls           │
-│ Render Download Export▸ Copy │      independently)       │
-│ ──────────── OUTPUT ──────── │                           │
-│ Resolution · Bit depth ·     │                           │
-│ Inversion · map cards        │                           │
-│        (scrolls independently)│                          │
-└──────────────────────────────┴───────────────────────────┘
-```
-
-1. **Shell** ([Generator.tsx](src/components/pages/Generator/Generator.tsx)) —
-   `h-dvh flex flex-col overflow-hidden`, full-width (drop `max-w-screen-2xl`).
-   Slim one-line header; the **footer folds into the header** (right-aligned
-   small links: credit, GitHub, version history) — a fixed shell has no room for
-   a footer row. `main` = `flex flex-1 min-h-0`, two columns:
-   - **Left column** (`flex-1 min-w-0 flex flex-col`):
-     - **Canvas region** (`flex-1 min-h-0`, no scrollbar): the pane is a size
-       container (`[container-type:size]`); the square canvas wrapper is
-       `aspect-square w-[min(100cqw,100cqh)]`, centered — always the largest
-       square that fits the pane. Busy overlay/progress unchanged.
-     - **Action row** (fixed, non-scrolling, between canvas and output):
-       Render · Download · Export maps (.zip) · Export options… · Copy URL.
-     - **Output region** (`overflow-y-auto min-h-0`, ~40% of the column):
-       Resolution, Bit depth, Inversion, and one **map card** per registry map
-       (see below).
-   - **Right column — Settings region** (`overflow-y-auto min-h-0`, wider
-     share): `SettingsSection` unchanged inside.
-   - **Responsive:** the shell is `lg:`-gated; below `lg` keep today's stacked,
-     page-scrolling layout.
-   - **Scrollbars:** thin/dark theme-matching rules in `global.css`
-     (`scrollbar-width: thin` + webkit) for the scrolling panes.
-
-2. **Export dialog** — new `ui/Dialog` primitive on **`@radix-ui/react-dialog`**
-   (matches the existing Radix-primitive-with-custom-styling pattern; focus
-   trap/Esc/aria for free). Panel: centered, `bg-black border border-white`,
-   `bg-black/70` backdrop. The current inline "Export options" panel moves in:
-   shared Base + per-map prefix/suffix + live filename preview, per-map include
-   checkboxes, per-map bit depth, collision warning, plus an **Export button
-   inside the dialog**. The action row's "Export maps (.zip)" stays as a
-   one-click export with current options.
-   **Split rule:** only export *configuration* lives in the dialog; creative
-   parameters (normal strength, AO radius/strength, LUT stops) move to the map
-   cards because they drive previews too.
-
-3. **Map cards** (output region) — one consistent card per registry map
-   replacing the scattered preview SubSections + export-panel param rows:
-   title, include-in-export checkbox, preview toggle (when `previewRGBA`),
-   param sliders, LUT editor (when `lut`). Registry-driven like everything
-   else — a future map gets a full card for free.
-
-4. **Auto-collapse disabled settings groups** — in `SettingsSection`, a group
-   whose enable switch is off collapses to its header row (switch + lock +
-   randomize stay reachable). Halves the settings column's visual weight.
-
-5. **Tooltip hints replace persistent hint text** — drop the italic
-   "Render first to enable." lines under disabled sections; use `title`
-   attributes (already the pattern on buttons).
-
-6. **Toast** — small hand-rolled corner toast (bottom-right, auto-dismiss ~2 s,
-   `role='status'` live region): "URL copied", "Exported {name}.zip". Replaces
-   the Copy-URL label swap and gives export completion visible confirmation.
-
-7. **Canvas zoom/pan** — wheel-zoom (around cursor, clamp ~1–8×) + drag-pan +
-   double-click reset, as a CSS transform on the canvas inside the square
-   viewport (`overflow-hidden`; rendering/`putImageData` unaffected). Needed to
-   judge detail at 4096²/8192² where the preview is heavily downscaled.
-
-8. **Click-to-type slider values** — the `Slider` numeric readout becomes
-   click-to-edit (commit on Enter/blur, Esc cancels, clamped to min/max/step).
-
-9. **Keyboard shortcuts** — `R` render, `E` export dialog, `1/2/3…` preview
-   toggles, `?` opens a cheatsheet (reuses `ui/Dialog`). Ignored while an
-   input/textarea has focus.
-
-**Suggested order:** shell + regions (1) → dialog + map cards (2, 3) →
-declutter passes (4, 5, 6) → interaction extras (7, 8, 9). Each step leaves the
-app working; existing unit tests are unaffected (layout-only) except any
-CanvasSection reorganization keeps the registry-driven wiring intact.
-
-**Verification:** all 91 unit tests stay green; live checks — canvas fits both
-pane dimensions with no scrollbars at multiple window sizes, both panes scroll
-independently, dialog export round-trips (naming/include/depth), collapsed
-groups re-expand on enable, zoom/pan doesn't affect exports, shortcuts guarded
-while typing, `lg`-down fallback still scrolls as today.
+**Verified live** at 1440×900: no page scrollbar, square canvas fits the pane,
+two independent scroll panes; R/E/?/Esc shortcuts work and are guarded inside
+inputs; dialog export downloads the zip + toast; map cards render for all four
+maps; disabled groups collapse; wheel-zoom transform + double-click reset;
+typed slider value (3.7) commits. 91 unit tests, tsc, Prettier, and the
+production build all green (layout-only change — no pipeline code touched).

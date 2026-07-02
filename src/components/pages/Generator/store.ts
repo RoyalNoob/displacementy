@@ -520,10 +520,11 @@ function randSetting(setting: SettingConstant): number {
 }
 
 function randDualSetting(setting: SettingDualConstant): NumberDual {
-  return [
-    randomInteger(setting.min, setting.max),
-    randomInteger(setting.min, setting.max),
-  ];
+  const a = randomInteger(setting.min, setting.max);
+  const b = randomInteger(setting.min, setting.max);
+  // Always ordered [lo, hi] — the range slider and its type-in editing clamp
+  // against the other end and rely on the order.
+  return a <= b ? [a, b] : [b, a];
 }
 
 function randSpritesPacks(): SpritesPack[] {
@@ -637,7 +638,9 @@ function parseDual(raw: string | null, fallback: NumberDual): NumberDual {
   if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) {
     return fallback;
   }
-  return [parts[0], parts[1]];
+  // Normalize to [lo, hi] — URLs written before duals were ordered (or edited
+  // by hand) may carry a reversed pair.
+  return parts[0] <= parts[1] ? [parts[0], parts[1]] : [parts[1], parts[0]];
 }
 
 function parseBoolean(raw: string | null, fallback: boolean): boolean {

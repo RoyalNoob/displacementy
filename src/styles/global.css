@@ -8,6 +8,12 @@
   --color-sky: #0369a1;
 }
 
+/* Thin, theme-matching scrollbars for the app-shell's scrolling panes. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.3) transparent;
+}
+
 /* Inter font | https://rsms.me/inter/download/ */
 :root {
   font-family: Inter, sans-serif;

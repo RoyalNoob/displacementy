@@ -107,3 +107,34 @@ describe('LUT stop serialization', () => {
     expect(useStore.getState().lutStops.color).toEqual(stops);
   });
 });
+
+describe('dual values are always ordered [lo, hi]', () => {
+  it('randomize produces ordered pairs (type-in editing relies on it)', () => {
+    const dualKeys = [
+      'rectBrightness',
+      'rectAlpha',
+      'gridBrightness',
+      'gridAlpha',
+      'gridAmount',
+      'colsBrightness',
+      'colsAlpha',
+      'colsAmount',
+      'rowsBrightness',
+      'rowsAlpha',
+      'rowsAmount',
+      'linesBrightness',
+      'linesAlpha',
+      'linesWidth',
+    ] as const;
+    // Several seeds: unordered generation would flip ~half of all pairs.
+    for (let s = 0; s < 10; s++) {
+      setSeed(s);
+      useStore.getState().randomize();
+      const state = useStore.getState();
+      for (const key of dualKeys) {
+        const [lo, hi] = state[key];
+        expect(lo, `${key} @ seed ${s}`).toBeLessThanOrEqual(hi);
+      }
+    }
+  });
+});

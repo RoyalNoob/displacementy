@@ -56,7 +56,10 @@
       "Bash(npx astro *)",
       "Bash(node -e ' *)",
       "Bash(git mv *)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(node -e \"console.log\\('dialog', require\\('./package.json'\\).dependencies['@radix-ui/react-dialog']\\)\")",
+      "Bash(echo \"TS_EXIT:$?\")",
+      "Bash(echo \"TS:$?\")"
     ]
   }
 }

@@ -46,12 +46,12 @@ export function Group(props: GroupProps) {
           </div>
         )}
       </div>
+      {/* A disabled group auto-collapses to its header row (switch and lock
+          stay reachable) — its controls have no effect anyway. */}
       <div
         className={clsx(
           'flex flex-col gap-2 border-l border-white pl-2',
-          props.withSwitch &&
-            !props.enabled &&
-            'pointer-events-none opacity-50',
+          props.withSwitch && !props.enabled && 'hidden',
         )}
       >
         {props.children}

@@ -1,13 +1,15 @@
 'use client';
 import clsx from 'clsx';
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {useStore} from '../store';
 import {Button} from '@/components/ui/Button';
 import {Checkbox} from '@/components/ui/Checkbox';
+import {Dialog} from '@/components/ui/Dialog';
 import {Input} from '@/components/ui/Input';
 import {LutEditor} from '@/components/ui/LutEditor';
 import {RadioGroup} from '@/components/ui/RadioGroup';
 import {Slider} from '@/components/ui/Slider';
+import {showToast} from '@/components/ui/Toast';
 import {SectionTitle} from '../SectionTitle';
 import {Canvas} from './Canvas';
 import {SubSection} from './SubSection';
@@ -49,6 +51,9 @@ const dateTimeStamp = (): string => {
   return `${y}-${m}-${d}-${hh}${mm}${ss}`;
 };
 
+/** Maps with an on-canvas preview, in registry order (drives the 1..9 keys). */
+const PREVIEWABLE_MAPS = MAP_REGISTRY.filter((map) => map.previewRGBA);
+
 export function CanvasSection() {
   const [resolution, setResolution] = useState<Resolution>('2048');
   const width = Number(resolution);
@@ -59,11 +64,11 @@ export function CanvasSection() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [previewType, setPreviewType] = useState<PreviewType>('original');
-  const [justCopiedUrl, setJustCopiedUrl] = useState<boolean>(false);
   const [bitDepth, setBitDepth] = useState<BitDepth>('8');
 
   // Multi-map ZIP export options — all keyed by map registry key.
-  const [exportOptionsOpen, setExportOptionsOpen] = useState<boolean>(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState<boolean>(false);
+  const [cheatsheetOpen, setCheatsheetOpen] = useState<boolean>(false);
   const [fileBase, setFileBase] = useState<string>(
     `DisplacementY_${width}x${height}`,
   );
@@ -316,8 +321,8 @@ export function CanvasSection() {
     });
   };
 
-  // Export height + normal + color maps as a single zip, derived from the retained
-  // float buffer (not the 8-bit canvas) and built off the main thread in a Worker.
+  // Export the selected maps as a single zip, derived from the retained float
+  // buffer (not the 8-bit canvas) and built off the main thread in a Worker.
   const exportMaps = () => {
     const heightmap = lastHeightsRef.current;
     if (!heightmap) return;
@@ -351,6 +356,7 @@ export function CanvasSection() {
       URL.revokeObjectURL(url);
       worker.terminate();
       setIsExporting(false);
+      showToast(`Exported ${zipName}.zip`);
     };
     worker.onerror = (event) => {
       worker.terminate();
@@ -384,8 +390,7 @@ export function CanvasSection() {
     if (navigator.clipboard) {
       void navigator.clipboard.writeText(url);
     }
-    setJustCopiedUrl(true);
-    setTimeout(() => setJustCopiedUrl(false), 1500);
+    showToast('URL copied to clipboard');
   };
 
   const quickRender = (callback: () => void) => {
@@ -460,22 +465,64 @@ export function CanvasSection() {
   const previewDisabledFor = (key: string): boolean =>
     isPristine || (previewType !== key && previewType !== 'original');
 
+  // Keyboard shortcuts (guarded while typing). Handler lives in a ref so the
+  // window listener registers once but always sees fresh state/closures.
+  const shortcutsRef = useRef<(event: KeyboardEvent) => void>(() => {});
+  shortcutsRef.current = (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Don't hijack keys while the user is typing in a field.
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.closest('input, textarea, [contenteditable="true"]')
+    )
+      return;
+
+    if (event.key === 'r' || event.key === 'R') {
+      if (!isBusy) render();
+    } else if (event.key === 'e' || event.key === 'E') {
+      setExportDialogOpen(true);
+    } else if (event.key === '?') {
+      setCheatsheetOpen(true);
+    } else if (/^[1-9]$/.test(event.key)) {
+      const map = PREVIEWABLE_MAPS[Number(event.key) - 1];
+      if (map && !isBusy && !previewDisabledFor(map.key)) {
+        togglePreviewFor(map.key)();
+      }
+    }
+  };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      shortcutsRef.current(event);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   return (
-    <section>
-      <SectionTitle>Output</SectionTitle>
-      <div className='flex gap-1'>
-        <Canvas
-          ref={canvasRef}
-          width={width}
-          height={height}
-          isRendering={isRendering}
-          isExporting={isExporting}
-          isPristine={isPristine}
-          progress={progress}
-        />
+    <section className='flex flex-col lg:h-full lg:min-h-0'>
+      {/* Canvas region: the largest square that fits the pane, no scrollbar.
+          The pane is a size container; the wrapper picks min(width, height). */}
+      <div className='lg:[container-type:size] lg:min-h-0 lg:flex-1'>
+        <div className='mx-auto w-full max-w-xl lg:flex lg:h-full lg:max-w-none lg:items-center lg:justify-center'>
+          <div className='w-full lg:w-[min(100cqw,100cqh)]'>
+            <Canvas
+              ref={canvasRef}
+              width={width}
+              height={height}
+              isRendering={isRendering}
+              isExporting={isExporting}
+              isPristine={isPristine}
+              progress={progress}
+            />
+          </div>
+        </div>
       </div>
-      <div className='flex flex-wrap gap-1 pt-2'>
-        <Button disabled={isBusy} onClick={render}>
+      {/* Action row (fixed, between canvas and the scrollable output). */}
+      <div className='flex flex-wrap gap-1 py-2'>
+        <Button disabled={isBusy} title='Shortcut: R' onClick={render}>
           Render
         </Button>
         <Button
@@ -501,23 +548,159 @@ export function CanvasSection() {
           Export maps (.zip)
         </Button>
         <Button
-          aria-expanded={exportOptionsOpen}
+          title='Shortcut: E'
           onClick={() => {
-            setExportOptionsOpen((open) => !open);
+            setExportDialogOpen(true);
           }}
         >
-          {`Export options ${exportOptionsOpen ? '▾' : '▸'}`}
+          Export options…
         </Button>
-        <Button onClick={copyUrl}>
-          {justCopiedUrl ? 'Copied!' : 'Copy URL'}
+        <Button onClick={copyUrl}>Copy URL</Button>
+        <Button
+          title='Keyboard shortcuts'
+          aria-label='Keyboard shortcuts'
+          onClick={() => {
+            setCheatsheetOpen(true);
+          }}
+        >
+          ?
         </Button>
       </div>
-      <span className='sr-only' role='status' aria-live='polite'>
-        {justCopiedUrl ? 'Shareable URL copied to clipboard' : ''}
-      </span>
-      {exportOptionsOpen && (
-        <div className='mt-2 flex flex-col gap-3 border border-dashed border-white/40 p-3'>
-          <p className='text-sm text-white'>Export options (.zip)</p>
+      {/* Output region: scrolls independently of the canvas and settings. */}
+      <div className='lg:min-h-0 lg:flex-[0_0_40%] lg:overflow-y-auto lg:border-t lg:border-dashed lg:border-white/20 lg:pr-1'>
+        <SectionTitle>Output</SectionTitle>
+        <SubSection title='Resolution'>
+          <RadioGroup<Resolution>
+            aria-label='Resolution'
+            items={[
+              {value: '1024', label: '1024x1024'},
+              {value: '2048', label: '2048x2048'},
+              {value: '4096', label: '4096x4096'},
+              {value: '8192', label: '8192x8192'},
+            ]}
+            value={resolution}
+            setValue={(value) => {
+              // Changing resolution resets the canvas, so the retained height
+              // buffer (and any preview) no longer matches — invalidate them.
+              setResolution(value);
+              setIsPristine(true);
+              setPreviewType('original');
+              lastHeightsRef.current = undefined;
+              // Keep the default filename base in sync with the new resolution.
+              setFileBase(`DisplacementY_${value}x${value}`);
+            }}
+          />
+          <span className='text-xs text-pink italic'>
+            Please note that changing the resolution resets canvas!
+          </span>
+        </SubSection>
+        <SubSection title='Bit depth'>
+          <RadioGroup<BitDepth>
+            aria-label='Export bit depth'
+            items={[
+              {value: '8', label: '8-bit'},
+              {value: '16', label: '16-bit'},
+              {value: '32', label: '32-bit float'},
+            ]}
+            value={bitDepth}
+            setValue={setBitDepth}
+          />
+          <span className='text-xs text-white/70 italic'>
+            16-bit exports the grayscale height map at full precision (no
+            banding). 32-bit float exports a lossless OpenEXR (.exr) for VFX /
+            DCC tools (Blender, Nuke, World Machine).
+          </span>
+        </SubSection>
+        <SubSection
+          title='Inversion'
+          disabled={invertDisabled}
+          hint={
+            isPristine
+              ? 'Render first to enable.'
+              : 'Return to the original preview to enable.'
+          }
+        >
+          <Button disabled={isBusy || invertDisabled} onClick={invert}>
+            Invert
+          </Button>
+        </SubSection>
+        {/* One card per registry map: include, preview, params, LUT editor. */}
+        <div className='flex flex-col gap-2 pt-4'>
+          {MAP_REGISTRY.map((map) => (
+            <div
+              key={map.key}
+              className='flex flex-col gap-2 border border-dashed border-white/20 p-2'
+            >
+              <div className='flex flex-wrap items-center justify-between gap-2'>
+                <h2 className='select-none'>{map.label}</h2>
+                <Checkbox
+                  label='Include in export'
+                  isChecked={includeMaps[map.key]}
+                  setIsChecked={(checked) => {
+                    setIncludeMaps((prev) => ({...prev, [map.key]: checked}));
+                  }}
+                />
+              </div>
+              {map.previewRGBA && (
+                <div
+                  title={
+                    previewDisabledFor(map.key)
+                      ? isPristine
+                        ? 'Render first to enable.'
+                        : 'Showing another preview — return to the original first.'
+                      : undefined
+                  }
+                >
+                  <Button
+                    disabled={isBusy || previewDisabledFor(map.key)}
+                    onClick={togglePreviewFor(map.key)}
+                  >
+                    Preview{' '}
+                    {previewType === map.key
+                      ? 'original'
+                      : map.label.toLowerCase()}
+                  </Button>
+                </div>
+              )}
+              {map.params.map((param) => (
+                <Slider
+                  key={param.key}
+                  label={param.label}
+                  min={param.min}
+                  max={param.max}
+                  step={param.step}
+                  value={mapParams[map.key][param.key]}
+                  setValue={(value) => {
+                    setMapParams((prev) => ({
+                      ...prev,
+                      [map.key]: {...prev[map.key], [param.key]: value},
+                    }));
+                  }}
+                />
+              ))}
+              {/* LUT maps get their stop editor here; changes apply on the next
+                  preview toggle / export (stops persist via Copy-URL). */}
+              {map.lut && (
+                <LutEditor
+                  label={`${map.label} gradient`}
+                  mode={map.lut.mode}
+                  stops={effectiveStops(map)}
+                  setStops={(stops) => {
+                    setLutStops(map.key, stops);
+                  }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Export configuration dialog. */}
+      <Dialog
+        title='Export options (.zip)'
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+      >
+        <div className='flex flex-col gap-3'>
           <div className='sm:w-1/2'>
             <Input
               label='Base name (shared)'
@@ -580,22 +763,6 @@ export function CanvasSection() {
                         {`→ ${memberName(map.key)}.png`}
                       </span>
                     </div>
-                    {map.params.map((param) => (
-                      <Slider
-                        key={param.key}
-                        label={param.label}
-                        min={param.min}
-                        max={param.max}
-                        step={param.step}
-                        value={mapParams[map.key][param.key]}
-                        setValue={(value) => {
-                          setMapParams((prev) => ({
-                            ...prev,
-                            [map.key]: {...prev[map.key], [param.key]: value},
-                          }));
-                        }}
-                      />
-                    ))}
                     {map.depthMode === 'select8or16' && (
                       <RadioGroup<'8' | '16'>
                         aria-label={`${map.label} bit depth`}
@@ -634,95 +801,50 @@ export function CanvasSection() {
             Height depth follows the global Bit depth selector. Color is always
             8-bit RGB.
           </span>
-        </div>
-      )}
-      <SubSection title='Resolution'>
-        <RadioGroup<Resolution>
-          aria-label='Resolution'
-          items={[
-            {value: '1024', label: '1024x1024'},
-            {value: '2048', label: '2048x2048'},
-            {value: '4096', label: '4096x4096'},
-            {value: '8192', label: '8192x8192'},
-          ]}
-          value={resolution}
-          setValue={(value) => {
-            // Changing resolution resets the canvas, so the retained height
-            // buffer (and any preview) no longer matches — invalidate them.
-            setResolution(value);
-            setIsPristine(true);
-            setPreviewType('original');
-            lastHeightsRef.current = undefined;
-            // Keep the default filename base in sync with the new resolution.
-            setFileBase(`DisplacementY_${value}x${value}`);
-          }}
-        />
-        <span className='text-xs text-pink italic'>
-          Please note that changing the resolution resets canvas!
-        </span>
-      </SubSection>
-      <SubSection title='Bit depth'>
-        <RadioGroup<BitDepth>
-          aria-label='Export bit depth'
-          items={[
-            {value: '8', label: '8-bit'},
-            {value: '16', label: '16-bit'},
-            {value: '32', label: '32-bit float'},
-          ]}
-          value={bitDepth}
-          setValue={setBitDepth}
-        />
-        <span className='text-xs text-white/70 italic'>
-          16-bit exports the grayscale height map at full precision (no
-          banding). 32-bit float exports a lossless OpenEXR (.exr) for VFX / DCC
-          tools (Blender, Nuke, World Machine).
-        </span>
-      </SubSection>
-      <SubSection
-        title='Inversion'
-        disabled={invertDisabled}
-        hint={
-          isPristine
-            ? 'Render first to enable.'
-            : 'Return to the original preview to enable.'
-        }
-      >
-        <Button disabled={isBusy || invertDisabled} onClick={invert}>
-          Invert
-        </Button>
-      </SubSection>
-      {MAP_REGISTRY.filter((map) => map.previewRGBA).map((map) => (
-        <SubSection
-          key={map.key}
-          title={map.label}
-          disabled={previewDisabledFor(map.key)}
-          hint={
-            isPristine
-              ? 'Render first to enable.'
-              : 'Showing another preview — return to the original first.'
-          }
-        >
-          <Button
-            disabled={isBusy || previewDisabledFor(map.key)}
-            onClick={togglePreviewFor(map.key)}
-          >
-            Preview{' '}
-            {previewType === map.key ? 'original' : map.label.toLowerCase()}
-          </Button>
-          {/* LUT maps get their stop editor here; changes apply on the next
-              preview toggle / export (stops persist via Copy-URL). */}
-          {map.lut && (
-            <LutEditor
-              label={`${map.label} gradient`}
-              mode={map.lut.mode}
-              stops={effectiveStops(map)}
-              setStops={(stops) => {
-                setLutStops(map.key, stops);
+          <div className='flex gap-1 pt-1'>
+            <Button
+              disabled={isPristine || isBusy || !canExport}
+              title={isPristine ? 'Render first to enable export' : undefined}
+              onClick={() => {
+                setExportDialogOpen(false);
+                exportMaps();
               }}
-            />
-          )}
-        </SubSection>
-      ))}
+            >
+              Export maps (.zip)
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+      {/* Keyboard shortcuts cheatsheet. */}
+      <Dialog
+        title='Keyboard shortcuts'
+        open={cheatsheetOpen}
+        onOpenChange={setCheatsheetOpen}
+      >
+        <table className='w-full text-sm'>
+          <tbody>
+            {[
+              ['R', 'Render'],
+              ['E', 'Open export options'],
+              ...PREVIEWABLE_MAPS.map((map, i) => [
+                String(i + 1),
+                `Toggle ${map.label.toLowerCase()} preview`,
+              ]),
+              ['?', 'This cheatsheet'],
+              ['Esc', 'Close dialog'],
+            ].map(([key, action]) => (
+              <tr key={key}>
+                <td className='w-16 py-1 pr-4'>
+                  <kbd className='border border-white/40 px-1.5 py-0.5 font-mono text-xs'>
+                    {key}
+                  </kbd>
+                </td>
+                <td className='py-1 text-white/80'>{action}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Dialog>
     </section>
   );
 }
