@@ -41,6 +41,11 @@ import {
 } from './constants';
 import {randomBoolean, randomInteger} from '@/utils/random';
 import {type NumberDual} from '@/types';
+import {
+  encodeStops,
+  decodeStops,
+  type Stop,
+} from './CanvasSection/utils/maps/lut';
 
 type Values = {
   initialSeed: number;
@@ -77,6 +82,13 @@ type Values = {
   spritesRotationEnabled: boolean;
   seamlessTextureEnabled: boolean;
   compositionModes: CompositionMode[];
+  /**
+   * Per-LUT-map gradient stops, keyed by map key (e.g. `color`). A missing key
+   * means "use the map's default stops" — so the record only carries what the
+   * user has customized. Not lockable; excluded from Randomize-all (the
+   * `LutEditor` has its own Randomize).
+   */
+  lutStops: Record<string, Stop[]>;
 };
 
 type Setters = {
@@ -120,6 +132,7 @@ type Setters = {
     seamlessTextureEnabled: Values['seamlessTextureEnabled'],
   ) => void;
   setCompositionModes: (compositionModes: Values['compositionModes']) => void;
+  setLutStops: (mapKey: string, stops: Stop[]) => void;
 };
 
 type ComputedValues = {
@@ -346,6 +359,9 @@ export const useStore = create<
   setCompositionModes(compositionModes: Values['compositionModes']) {
     set(() => ({compositionModes}));
   },
+  setLutStops(mapKey: string, stops: Stop[]) {
+    set((state) => ({lutStops: {...state.lutStops, [mapKey]: stops}}));
+  },
   // ComputedValues
   // ---
   getSprites() {
@@ -558,6 +574,9 @@ function randomValues(): Values {
     spritesRotationEnabled: randomBoolean(),
     seamlessTextureEnabled: seamlessTextureEnabled.default,
     compositionModes: randCompositionModes(),
+    // Empty = per-map defaults. Randomize-all never reaches this key anyway:
+    // `applyLocks` passes only LOCKABLE_KEYS through.
+    lutStops: {},
   };
 }
 
@@ -598,6 +617,7 @@ function defaultValues(): Values {
     spritesRotationEnabled: spritesRotationEnabled.default,
     seamlessTextureEnabled: seamlessTextureEnabled.default,
     compositionModes: compositionModes.default,
+    lutStops: {},
   };
 }
 
@@ -716,8 +736,24 @@ function getInitialValues(): Values & {locks: Locks} {
       ALL_COMPOSITION_MODES,
       base.compositionModes,
     ),
+    lutStops: parseLutStops(params),
     locks: parseLocks(params.get('locks')),
   };
+}
+
+/**
+ * Collects every `lut_<mapkey>` param into the stops record. Keys are read
+ * generically (not validated against the map registry) so the store stays
+ * decoupled from it; unknown/malformed entries are simply dropped.
+ */
+function parseLutStops(params: URLSearchParams): Record<string, Stop[]> {
+  const lutStops: Record<string, Stop[]> = {};
+  for (const [key, value] of params.entries()) {
+    if (!key.startsWith('lut_')) continue;
+    const stops = decodeStops(value);
+    if (stops) lutStops[key.slice('lut_'.length)] = stops;
+  }
+  return lutStops;
 }
 
 /**
@@ -782,6 +818,11 @@ function serializeValues(values: Values, locks: Locks): string {
     compositionModes: values.compositionModes.join(','),
     locks: LOCKABLE_KEYS.filter((key) => locks[key]).join(','),
   });
+
+  // Customized LUT stops only (a missing key means "map defaults").
+  for (const [mapKey, stops] of Object.entries(values.lutStops)) {
+    params.set(`lut_${mapKey}`, encodeStops(stops));
+  }
 
   return params.toString();
 }

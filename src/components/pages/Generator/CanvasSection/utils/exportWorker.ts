@@ -5,7 +5,8 @@ export type ExportRequest = {
   heights: Float32Array;
   width: number;
   height: number;
-  palette: Uint8Array;
+  /** Built LUT per LUT-map key (LUTs are built on the main thread). */
+  luts: Record<string, Uint8Array>;
   include: Record<string, boolean>;
   depths: Record<string, MapDepth>;
   params: Record<string, Record<string, number>>;

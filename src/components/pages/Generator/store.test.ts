@@ -1,6 +1,7 @@
 import {beforeEach, describe, expect, it} from 'vitest';
 import {useStore, LOCKABLE_KEYS} from './store';
 import {setSeed} from '@/utils/random';
+import {decodeStops} from './CanvasSection/utils/maps/lut';
 
 // The store is a singleton; clear all locks before each test so they are
 // order-independent.
@@ -70,5 +71,39 @@ describe('lock serialization', () => {
   it('emits an empty `locks` param when nothing is locked', () => {
     const query = useStore.getState().getSettingsQuery();
     expect(new URLSearchParams(query).get('locks')).toBe('');
+  });
+});
+
+describe('LUT stop serialization', () => {
+  it('emits customized stops as a lut_<mapkey> param that round-trips', () => {
+    const stops = [
+      {position: 0, color: {r: 10, g: 20, b: 30}},
+      {position: 0.5, color: {r: 40, g: 50, b: 60}},
+      {position: 1, color: {r: 70, g: 80, b: 90}},
+    ];
+    useStore.getState().setLutStops('color', stops);
+
+    const query = useStore.getState().getSettingsQuery();
+    const raw = new URLSearchParams(query).get('lut_color');
+    expect(raw).toBeTruthy();
+
+    const decoded = decodeStops(raw);
+    expect(decoded).toBeDefined();
+    expect(decoded!.length).toBe(3);
+    for (let i = 0; i < 3; i++) {
+      expect(decoded![i].position).toBeCloseTo(stops[i].position, 2);
+      expect(decoded![i].color).toEqual(stops[i].color);
+    }
+  });
+
+  it('randomize-all leaves customized stops untouched (not lockable)', () => {
+    setSeed(3);
+    const stops = [
+      {position: 0.25, color: {r: 1, g: 2, b: 3}},
+      {position: 0.75, color: {r: 4, g: 5, b: 6}},
+    ];
+    useStore.getState().setLutStops('color', stops);
+    useStore.getState().randomize();
+    expect(useStore.getState().lutStops.color).toEqual(stops);
   });
 });

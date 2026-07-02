@@ -1,9 +1,9 @@
 # Spec — Rendering core, export & derived maps
 
 > Status: everything under **Shipped** is done, tested, and verified in-browser
-> (82 unit tests green at last count). Active work: **LUT editor with draggable
-> stops** — see the final section. (The prior parameter-locks spec was fully
-> implemented and removed; the code is its record.)
+> (91 unit tests green at last count). No active work in flight. (The prior
+> parameter-locks spec was fully implemented and removed; the code is its
+> record.)
 
 ## Shipped — CPU float-precision rendering core (Phases 0–D)
 
@@ -101,8 +101,8 @@ zip, without disturbing the on-screen preview.
 - **Maps:** height (grayscale 8/16) · normal (**3×3 Sobel**, OpenGL/+Y encoding,
   strength 0.1–5, 8/16-bit RGB —
   [normalMap.ts](src/components/pages/Generator/CanvasSection/utils/maps/normalMap.ts)) ·
-  color (palette LUT over float heights —
-  [colorMap.ts](src/components/pages/Generator/CanvasSection/utils/maps/colorMap.ts)) ·
+  color (stop-based LUT over float heights —
+  [lut.ts](src/components/pages/Generator/CanvasSection/utils/maps/lut.ts)) ·
   **AO** (**HBAO**, 8 directions × 8 steps, tunable radius + strength, grayscale,
   off by default — [ao.ts](src/components/pages/Generator/CanvasSection/utils/maps/ao.ts)).
 - **AO at scale:** above 2048², `toAO8Auto` box-downsamples the heights, runs
@@ -115,8 +115,48 @@ zip, without disturbing the on-screen preview.
   `MapContext`. Verified by shift-equivariance tests (`AO(roll(h)) ===
   roll(AO(h))` under wrap) and a live seam-continuity check (seam |Δ| ≪ interior).
 - **Future maps (unbuilt):** roughness / specular / metalness (LUT remaps of
-  height/slope), curvature — each just a registry entry once the scalar-LUT
-  machinery below lands.
+  height/slope), curvature — each is now just a registry entry with
+  `lut: {mode: 'scalar', defaultStops}` (the scalar-LUT path below is built and
+  unit-tested, awaiting its first map).
+
+## Shipped — LUT editor with draggable stops
+
+Colorization moved from a fixed even-spacing canvas gradient to **draggable stop
+positions**, built as reusable LUT machinery.
+
+- **LUT core** ([lut.ts](src/components/pages/Generator/CanvasSection/utils/maps/lut.ts),
+  pure/Worker-safe): `Stop {position 0..1, color}`; `buildLUT(stops, channels,
+  size=256)` — sort, **sRGB-linear** interpolate, clamp ends (parity with the old
+  canvas gradient; OKLab a trivial future swap); `applyLUT(heights, lut,
+  channels)` — the height→index lookup generalized to 3-ch (color) or 1-ch
+  (scalar). The old `colorMap.ts` + canvas `createLinearGradient` row-readback +
+  `Gradient` component were deleted; `ColorPicker` was promoted to
+  [ui/ColorPicker](src/components/ui/ColorPicker/ColorPicker.tsx).
+- **Editor** ([ui/LutEditor](src/components/ui/LutEditor/LutEditor.tsx),
+  reusable): gradient preview bar with **draggable handles** (window-level
+  pointer tracking — capture-free, so drags keep following the pointer off the
+  handle), click-the-bar or "Add stop" (widest-gap midpoint) to add (new stop
+  takes the gradient's color there — no visual jump), select→edit/delete (min 2,
+  max 20), per-editor Randomize (colors only, positions kept). `mode: 'color' |
+  'scalar'` — color edits via `ColorPicker`, scalar via a 0–255 value slider.
+  A11y: handles are `slider`-role elements, arrow keys nudge ±1%.
+- **Registry hook:** `MapDescriptor.lut?: {mode, defaultStops}`;
+  `MapContext.palette` → `lut` (built on the main thread from the map's stops,
+  passed to Worker/preview as plain bytes). Any map declaring `lut` gets its
+  editor in the UI automatically. Color's defaults are the legacy
+  cyan/purple/yellow at 0/0.5/1 — fresh load looks identical to before.
+- **URL persistence:** `Values.lutStops: Record<mapKey, Stop[]>` in the store —
+  only customized maps serialize, as `lut_<mapkey>=PPRRGGBB,…` (2-hex position
+  byte + 6-hex color per stop); parse reads `lut_*` generically (store stays
+  decoupled from the registry) and drops malformed values (→ defaults). Not
+  lockable; **excluded from Randomize-all** (`applyLocks` passes only
+  `LOCKABLE_KEYS`). No determinism impact (color is post-render).
+- **Verified:** 19 new unit tests (LUT math, encode/decode, store round-trip +
+  randomize exclusion); live — default stops render at legacy colors/positions,
+  drag 50→85% works, keyboard nudge works, Copy-URL emits `lut_color` and reload
+  restores the stops, and the exported `_color.png` matches the custom LUT
+  within ±2/channel across 530 sampled pixels (cross-checked against the height
+  member).
 
 ## Decisions (resolved, condensed)
 
@@ -134,61 +174,3 @@ zip, without disturbing the on-screen preview.
 - GPU/WebGL generation (breaks cross-machine determinism).
 - Parallelizing the generation loop (breaks PRNG order).
 - Group-level locks, lock-all, reroll-as-preset (from the prior locks spec).
-
----
-
-## Active — LUT editor with draggable stops (planned, not implemented)
-
-Replace the fixed even-spacing gradient with **draggable stop positions**, built
-as **reusable LUT machinery** so future scalar maps (roughness/specular/
-metalness) are one registry entry each.
-
-**Resolved decisions:** scope = **color map only** this pass (scalar path built +
-unit-tested, no new map shipped); interpolation = **sRGB-linear** (parity with
-today's canvas gradient; OKLab a trivial future swap); stops **persist in the
-Copy-URL** query.
-
-1. **LUT core — new `maps/lut.ts` (pure, Worker-safe).**
-   - `type Stop = { position: number; color: ColorRGB }` (position free in `0..1`).
-   - `buildLUT(stops, size=256) → Uint8Array` — sort by position, sRGB-linear
-     interpolate between stops, clamp ends. Replaces the canvas
-     `createLinearGradient` + row-0 readback entirely (deterministic, testable,
-     no DOM).
-   - `applyLUT(heights, lut, w, h, channels) → Uint8Array` — generalizes today's
-     color lookup (`index = round(clamp(v)·(len−1))`) to N channels: `3` = color
-     RGB, `1` = grayscale for future scalar maps.
-   - `colorMap.ts` (`toColorMapRGB8`, `paletteFromRowRGBA`) is superseded and
-     removed.
-2. **Reusable editor — new `ui/LutEditor` (replaces `Gradient`).**
-   - Gradient preview bar (CSS `linear-gradient` with positioned stops, matching
-     `buildLUT`) + **draggable stop handles**: pointer-drag repositions, click on
-     the bar adds a stop, select→edit/delete; min 2 stops; Randomize.
-   - `mode: 'color' | 'scalar'` — color mode edits stops with the existing
-     `ColorPicker`; scalar mode uses a 0–255 value slider (built now, first used
-     by a future roughness map).
-   - A11y: each handle is a `slider`-role element (`aria-valuenow` = position),
-     arrow keys nudge.
-3. **Registry integration.**
-   - `MapDescriptor.lut?: { mode: 'color'|'scalar'; defaultStops: Stop[] }`;
-     `MapContext.palette` → `lut: Uint8Array`.
-   - Main thread builds each LUT-map's LUT from its stops and passes it to the
-     Worker/preview (mirrors the old palette flow — Worker still receives plain
-     data). CanvasSection renders a `LutEditor` for every map declaring `lut`;
-     `gradientCanvasRef` and the `Gradient` component are deleted.
-4. **URL persistence (store).**
-   - `Values.lutStops: Record<string, Stop[]>` + `setLutStops(mapKey, stops)`.
-   - Query encoding: `lut_<mapkey>=PPRRGGBB,PPRRGGBB,…` (2-hex position byte +
-     6-hex color per stop); parse side reads any `lut_*` params generically so
-     the store stays decoupled from the registry. Effective stops =
-     `store.lutStops[key] ?? descriptor.defaultStops`.
-   - Excluded from "Randomize all" (keeps its own Randomize); not lockable. No
-     effect on the determinism guard (color is post-render). Old URLs simply fall
-     back to defaults.
-5. **Parity note.** Default stops migrate to 3 colors at positions 0 / 0.5 / 1 —
-   a fresh load looks identical to today; the change is that positions become
-   explicit and editable (auto even-spacing goes away by design).
-
-**Verification plan:** unit tests for `buildLUT` (arbitrary positions, endpoint
-clamping, interpolation) and `applyLUT` (1-ch + 3-ch); store round-trip test for
-the stop encoding; live check that dragging updates the preview, Copy-URL
-round-trips the gradient, and default output matches today's.

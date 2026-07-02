@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {MAP_REGISTRY, getMap} from './registry';
+import {buildLUT} from './lut';
 
 describe('MAP_REGISTRY', () => {
   it('has the expected maps with unique keys', () => {
@@ -23,7 +24,10 @@ describe('MAP_REGISTRY', () => {
       heights: new Float32Array(w * h).fill(0.5),
       width: w,
       height: h,
-      palette: new Uint8Array([0, 0, 0, 255, 255, 255]),
+      lut: buildLUT([
+        {position: 0, color: {r: 0, g: 0, b: 0}},
+        {position: 1, color: {r: 255, g: 255, b: 255}},
+      ]),
       params: {strength: 1, radius: 8},
       seamless: false,
     };

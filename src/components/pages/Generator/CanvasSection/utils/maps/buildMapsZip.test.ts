@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {unzipSync} from 'fflate';
 import {decode} from 'fast-png';
 import {buildMapsZip, type BuildMapsZipParams} from './buildMapsZip';
+import {buildLUT} from './lut';
 
 const makeHeights = (w: number, h: number): Float32Array => {
   const heights = new Float32Array(w * h);
@@ -10,13 +11,16 @@ const makeHeights = (w: number, h: number): Float32Array => {
   return heights;
 };
 
-const palette = new Uint8Array([0, 0, 0, 255, 255, 255]); // black → white
+const colorLut = buildLUT([
+  {position: 0, color: {r: 0, g: 0, b: 0}},
+  {position: 1, color: {r: 255, g: 255, b: 255}},
+]); // black → white
 
 const baseParams = (w: number, h: number): BuildMapsZipParams => ({
   heights: makeHeights(w, h),
   width: w,
   height: h,
-  palette,
+  luts: {color: colorLut},
   include: {height: true, normal: true, color: true},
   depths: {height: 16, normal: 8, color: 8},
   params: {height: {}, normal: {strength: 1}, color: {}},

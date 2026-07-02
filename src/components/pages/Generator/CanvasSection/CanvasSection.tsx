@@ -5,18 +5,18 @@ import {useStore} from '../store';
 import {Button} from '@/components/ui/Button';
 import {Checkbox} from '@/components/ui/Checkbox';
 import {Input} from '@/components/ui/Input';
+import {LutEditor} from '@/components/ui/LutEditor';
 import {RadioGroup} from '@/components/ui/RadioGroup';
 import {Slider} from '@/components/ui/Slider';
 import {SectionTitle} from '../SectionTitle';
 import {Canvas} from './Canvas';
-import {Gradient} from './Gradient';
 import {SubSection} from './SubSection';
 import {loadSprites, type DrawProps} from './utils/draw';
 import {type RenderRequest, type RenderResponse} from './utils/renderWorker';
 import {type ExportRequest, type ExportResponse} from './utils/exportWorker';
 import {MAP_REGISTRY, getMap} from './utils/maps/registry';
 import {type MapDepth, type MapDescriptor} from './utils/maps/types';
-import {paletteFromRowRGBA} from './utils/maps/colorMap';
+import {buildLUT, type Stop} from './utils/maps/lut';
 import {drawInvert} from './utils/drawInvert';
 import {saveImage} from './utils/saveImage';
 import {encodeHeightmap16} from './utils/heightmapPng';
@@ -87,6 +87,21 @@ export function CanvasSection() {
     mapRecord(() => 8),
   );
 
+  // Per-LUT-map gradient stops live in the store (they serialize into the
+  // shareable URL); a missing key falls back to the map's default stops.
+  const lutStops = useStore((state) => state.lutStops);
+  const setLutStops = useStore((state) => state.setLutStops);
+  const effectiveStops = (map: MapDescriptor): Stop[] =>
+    lutStops[map.key] ?? map.lut?.defaultStops ?? [];
+  /** Built LUTs for every LUT map (main thread; passed to Worker/preview). */
+  const builtLuts = (): Record<string, Uint8Array> =>
+    Object.fromEntries(
+      MAP_REGISTRY.filter((map) => map.lut).map((map) => [
+        map.key,
+        buildLUT(effectiveStops(map), map.lut!.mode === 'scalar' ? 1 : 3),
+      ]),
+    );
+
   // Any long-running canvas work; blocks re-entrant actions and shows the overlay.
   const isBusy = isRendering || isExporting;
 
@@ -120,7 +135,6 @@ export function CanvasSection() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasOriginalPreviewDataUrl = useRef<string | undefined>(undefined);
-  const gradientCanvasRef = useRef<HTMLCanvasElement>(null);
   // The most recent render's float height buffer, retained for high-bit-depth
   // export. Independent of preview state; invalidated on resolution change.
   // `seamless` records whether that render tiled (so derived maps wrap to match).
@@ -309,13 +323,9 @@ export function CanvasSection() {
     if (!heightmap) return;
     const {data: heights, width: w, height: h, seamless} = heightmap;
 
-    // Read the gradient palette (top row) on the main thread — the Worker has no
-    // DOM canvas — and pass it along.
-    const gradientCtx = getCtx2dFromRef(gradientCanvasRef);
-    const {w: gradientWidth} = getCanvasDimensions(gradientCtx);
-    const palette = paletteFromRowRGBA(
-      gradientCtx.getImageData(0, 0, gradientWidth, 1).data,
-    );
+    // Build each LUT map's table from its stops on the main thread — the
+    // Worker receives plain bytes.
+    const luts = builtLuts();
 
     setIsExporting(true);
     setProgress(0);
@@ -349,20 +359,20 @@ export function CanvasSection() {
     };
 
     // Transfer a COPY of the heights (keep the retained buffer intact for future
-    // exports / 16-bit download); the palette is freshly built, safe to transfer.
+    // exports / 16-bit download). LUTs are tiny (≤768 B) — cloned, not transferred.
     const heightsCopy = heights.slice();
     const request: ExportRequest = {
       heights: heightsCopy,
       width: w,
       height: h,
-      palette,
+      luts,
       include: includeMaps,
       depths: mapRecord(resolveDepth),
       params: mapParams,
       seamless,
       memberNames: mapRecord((map) => memberName(map.key)),
     };
-    worker.postMessage(request, [heightsCopy.buffer, palette.buffer]);
+    worker.postMessage(request, [heightsCopy.buffer]);
   };
 
   const copyUrl = () => {
@@ -411,16 +421,16 @@ export function CanvasSection() {
         const descriptor = getMap(key);
         if (heightmap && descriptor.previewRGBA) {
           const {data, width: w, height: h, seamless} = heightmap;
-          const gradientCtx = getCtx2dFromRef(gradientCanvasRef);
-          const {w: gradientWidth} = getCanvasDimensions(gradientCtx);
-          const palette = paletteFromRowRGBA(
-            gradientCtx.getImageData(0, 0, gradientWidth, 1).data,
-          );
           const rgba = descriptor.previewRGBA({
             heights: data,
             width: w,
             height: h,
-            palette,
+            lut: descriptor.lut
+              ? buildLUT(
+                  effectiveStops(descriptor),
+                  descriptor.lut.mode === 'scalar' ? 1 : 3,
+                )
+              : new Uint8Array(0),
             params: mapParams[key],
             seamless,
           });
@@ -699,9 +709,18 @@ export function CanvasSection() {
             Preview{' '}
             {previewType === map.key ? 'original' : map.label.toLowerCase()}
           </Button>
-          {/* The gradient editor feeds the color map's palette; keep it mounted
-              (export reads it) by rendering it in the color map's section. */}
-          {map.key === 'color' && <Gradient ref={gradientCanvasRef} />}
+          {/* LUT maps get their stop editor here; changes apply on the next
+              preview toggle / export (stops persist via Copy-URL). */}
+          {map.lut && (
+            <LutEditor
+              label={`${map.label} gradient`}
+              mode={map.lut.mode}
+              stops={effectiveStops(map)}
+              setStops={(stops) => {
+                setLutStops(map.key, stops);
+              }}
+            />
+          )}
         </SubSection>
       ))}
     </section>

@@ -1,3 +1,5 @@
+import {type Stop} from './lut';
+
 /** PNG bit depth a map can be encoded at. */
 export type MapDepth = 8 | 16;
 
@@ -24,8 +26,12 @@ export type MapContext = {
   heights: Float32Array;
   width: number;
   height: number;
-  /** Gradient palette as RGB triplets (only the color map uses it). */
-  palette: Uint8Array;
+  /**
+   * This map's LUT (built from its stops via `buildLUT`), packed with the
+   * channel count of `MapDescriptor.lut.mode` (`color` → 3, `scalar` → 1).
+   * Empty for maps that declare no `lut`.
+   */
+  lut: Uint8Array;
   /** Resolved param values for this map, keyed by `ParamSpec.key`. */
   params: Record<string, number>;
   /**
@@ -56,6 +62,12 @@ export type MapDescriptor = {
   defaultSuffix: string;
   /** Tunable params (empty for height/color). */
   params: ParamSpec[];
+  /**
+   * Declared by LUT maps (height→value remaps): the editor mode and the default
+   * stops. Maps with `lut` get a `LutEditor` in the UI and receive their built
+   * LUT via `MapContext.lut`.
+   */
+  lut?: {mode: 'color' | 'scalar'; defaultStops: Stop[]};
   /** Pixels for export at the given depth (length = w*h*channels). */
   derive: (ctx: MapContext, depth: MapDepth) => Uint8Array | Uint16Array;
   /**

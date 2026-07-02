@@ -1,6 +1,6 @@
 import {quantizeTo8, quantizeTo16} from '../heightmapPng';
 import {toNormalMapRGB8, toNormalMapRGB16, toNormalMapRGBA} from './normalMap';
-import {toColorMapRGB8, toColorMapRGBA} from './colorMap';
+import {applyLUT, applyLUTRGBA} from './lut';
 import {toAO8Auto, toAORGBA} from './ao';
 import {type MapDescriptor} from './types';
 
@@ -53,10 +53,18 @@ export const MAP_REGISTRY: MapDescriptor[] = [
     defaultInclude: true,
     defaultSuffix: '_color',
     params: [],
-    derive: ({heights, palette, width, height}) =>
-      toColorMapRGB8(heights, palette, width, height),
-    previewRGBA: ({heights, palette, width, height}) =>
-      toColorMapRGBA(heights, palette, width, height),
+    lut: {
+      mode: 'color',
+      // The pre-LUT-editor gradient defaults (cyan → purple → yellow),
+      // even-spaced — a fresh load looks identical to before.
+      defaultStops: [
+        {position: 0, color: {r: 0, g: 255, b: 255}},
+        {position: 0.5, color: {r: 149, g: 0, b: 255}},
+        {position: 1, color: {r: 255, g: 229, b: 0}},
+      ],
+    },
+    derive: ({heights, lut}) => applyLUT(heights, lut, 3),
+    previewRGBA: ({heights, lut}) => applyLUTRGBA(heights, lut),
   },
   {
     key: 'ao',

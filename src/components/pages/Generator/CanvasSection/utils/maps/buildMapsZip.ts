@@ -9,8 +9,8 @@ export type BuildMapsZipParams = {
   heights: Float32Array;
   width: number;
   height: number;
-  /** Gradient palette as RGB triplets (see `paletteFromRowRGBA`). */
-  palette: Uint8Array;
+  /** Built LUT per LUT-map key (see `buildLUT`); absent for non-LUT maps. */
+  luts: Record<string, Uint8Array>;
   /** Which maps to include, keyed by map key; at least one must be true. */
   include: Record<string, boolean>;
   /** Resolved export depth per map key. */
@@ -36,7 +36,7 @@ export const buildMapsZip = ({
   heights,
   width,
   height,
-  palette,
+  luts,
   include,
   depths,
   params,
@@ -55,7 +55,7 @@ export const buildMapsZip = ({
         heights,
         width,
         height,
-        palette,
+        lut: luts[map.key] ?? new Uint8Array(0),
         params: params[map.key] ?? {},
         seamless,
       },
